@@ -6,7 +6,7 @@ import { demoChiefScores, demoCompetitors, demoJudges, demoPrelimScores, demoRou
 import type { RawScore, Role } from "@/lib/types";
 import { advancementCsv, rawScoresCsv } from "@/lib/scoring/exports";
 import { calculatePrelimAdvancement } from "@/lib/scoring/prelims";
-import { AppFrame, NavButton, Panel, ScoreInput, competitorLabel, updateScore } from "@/components/workspaces/shared";
+import { AppFrame, NavButton, Panel, ScoreSwipeRow, competitorLabel, updateScore } from "@/components/workspaces/shared";
 
 export function ChiefWorkspace({ token }: { token: string }) {
   const [chiefScores, setChiefScores] = useState<RawScore[]>(demoChiefScores);
@@ -36,7 +36,7 @@ export function ChiefWorkspace({ token }: { token: string }) {
         </>
       }
     >
-      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <Panel title="Boundary review">
           {allTies.length === 0 ? (
             <div className="rounded-[8px] bg-celadon/20 p-4 text-sm font-bold text-graphite">
@@ -83,17 +83,14 @@ export function ChiefWorkspace({ token }: { token: string }) {
                     .map((competitor) => {
                       const score = chiefScores.find((item) => item.subjectId === competitor.id);
                       return (
-                        <div key={competitor.id} className="grid grid-cols-[1fr_92px] items-center gap-3 rounded-[8px] border border-graphite/10 bg-paper p-3">
-                          <div>
-                            <p className="font-black">{competitorLabel(competitor)}</p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-graphite/55">Raw score</p>
-                          </div>
-                          <ScoreInput
-                            label={`Chief Judge score ${competitor.preferredName}`}
-                            score={score?.scoreX2 ?? 0}
-                            onChange={(nextScore) => changeScore(competitor.id, nextScore)}
-                          />
-                        </div>
+                        <ScoreSwipeRow
+                          key={competitor.id}
+                          competitor={competitor}
+                          scoreX2={score?.scoreX2 ?? 0}
+                          label={`Chief Judge score ${competitor.preferredName}`}
+                          instruction="Swipe sideways to set CJ raw score. Swipe up or down to scroll."
+                          onChange={(nextScore) => changeScore(competitor.id, nextScore)}
+                        />
                       );
                     })}
                 </div>
