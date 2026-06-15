@@ -48,6 +48,28 @@ test("judge warnings stay in the bottom action area", async ({ page }) => {
   await expect(page.getByRole("button", { name: /submit leaders scores/i })).toBeDisabled();
 });
 
+test("judge boundary ties highlight matching bib groups", async ({ page }) => {
+  await page.goto("/judge/demo-judge");
+  const rileyScore = page.getByRole("slider", { name: "Score Riley" });
+  const caseyScore = page.getByRole("slider", { name: "Score Casey" });
+  const taylorScore = page.getByRole("slider", { name: "Score Taylor" });
+  const quinnScore = page.getByRole("slider", { name: "Score Quinn" });
+
+  for (let step = 0; step < 3; step += 1) {
+    await caseyScore.press("ArrowRight");
+    await quinnScore.press("ArrowRight");
+  }
+
+  await expect(page.getByTestId("judge-warning")).toContainText("Tie 1: Leader yes boundary tie at 4 at 83.5; tied bibs 104, 105.");
+  await expect(page.getByTestId("judge-warning")).toContainText("Tie 2: Leader alternate boundary tie at 7 at 79.0; tied bibs 107, 108.");
+  await expect(rileyScore).toHaveAttribute("data-score-tie-group", "Tie 1");
+  await expect(caseyScore).toHaveAttribute("data-score-tie-group", "Tie 1");
+  await expect(taylorScore).toHaveAttribute("data-score-tie-group", "Tie 2");
+  await expect(quinnScore).toHaveAttribute("data-score-tie-group", "Tie 2");
+  await expect(rileyScore).toContainText("Tie 1");
+  await expect(quinnScore).toContainText("Tie 2");
+});
+
 test("chief judge uses the same raw-score slider interface", async ({ page }) => {
   await page.goto("/chief/demo-chief");
   await expect(page.getByRole("heading", { name: /raw score review/i })).toBeVisible();

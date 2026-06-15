@@ -15,10 +15,19 @@ import {
   roleAssignmentAllows,
   roleAssignmentLabel
 } from "@/lib/data/demo-data";
-import type { JudgeAssignmentRole, RawScore, Role, SaveState } from "@/lib/types";
+import type { BoundaryTie, JudgeAssignmentRole, RawScore, Role, SaveState } from "@/lib/types";
 import { deriveJudgePrelimMarks } from "@/lib/scoring/prelims";
-import { validateScoreSheet } from "@/lib/scoring/score-utils";
-import { AppFrame, Panel, ScoreSwipeRow, StatusPill, competitorLabel, updateScore } from "@/components/workspaces/shared";
+import { formatScore, validateScoreSheet } from "@/lib/scoring/score-utils";
+import {
+  AppFrame,
+  Panel,
+  ScoreSwipeRow,
+  StatusPill,
+  competitorLabel,
+  type ScoreTieHighlight,
+  type TieHighlightTone,
+  updateScore
+} from "@/components/workspaces/shared";
 
 type JudgeView = "heat" | "rank" | "derived" | "name";
 
@@ -28,6 +37,8 @@ const judgeViews: Array<{ id: JudgeView; label: string; icon: React.ComponentTyp
   { id: "derived", label: "Results", icon: Trophy },
   { id: "name", label: "Name", icon: Search }
 ];
+
+const tieTones: TieHighlightTone[] = ["rose", "sky", "violet", "teal"];
 
 export function JudgeWorkspace({ token }: { token: string }) {
   const accessLink = useMemo(() => demoJudgeAccessLinks.find((link) => link.token === token) ?? demoJudgeAccessLinks[0], [token]);
@@ -92,9 +103,30 @@ export function JudgeWorkspace({ token }: { token: string }) {
     [activeCompetitors, activeScores]
   );
 
+  const activeTieGroups = useMemo(
+    () =>
+      activeMarks.ties.map((tie, index) => ({
+        tie,
+        label: `Tie ${index + 1}`,
+        tone: tieTones[index % tieTones.length]
+      })),
+    [activeMarks.ties]
+  );
+  const tieHighlightsByCompetitor = useMemo(() => {
+    const highlights = new Map<string, ScoreTieHighlight>();
+    for (const group of activeTieGroups) {
+      for (const subjectId of group.tie.subjectIds) {
+        if (!highlights.has(subjectId)) {
+          highlights.set(subjectId, { label: group.label, tone: group.tone });
+        }
+      }
+    }
+    return highlights;
+  }, [activeTieGroups]);
+
   const validationErrors = [
     ...validateScoreSheet(activeScores, false),
-    ...activeMarks.ties.map((tie) => `${activeRole} ${tie.kind} boundary tie at ${tie.boundary}.`)
+    ...activeTieGroups.map((group) => formatTieWarning(activeRole, group.tie, group.label))
   ];
   const statusByCompetitor = useMemo(
     () =>
@@ -160,12 +192,31 @@ export function JudgeWorkspace({ token }: { token: string }) {
 
         <Panel title={`${viewTitle(activeView)} / ${rolePlural(activeRole)}`}>
           {activeView === "heat" ? (
-            <HeatScoreList role={activeRole} scores={activeScores} statusByCompetitor={statusByCompetitor} onChange={changeScore} />
+            <HeatScoreList
+              role={activeRole}
+              scores={activeScores}
+              statusByCompetitor={statusByCompetitor}
+              tieHighlightsByCompetitor={tieHighlightsByCompetitor}
+              onChange={changeScore}
+            />
           ) : null}
-          {activeView === "rank" ? <RankScoreList scores={activeScores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
+          {activeView === "rank" ? (
+            <RankScoreList
+              scores={activeScores}
+              statusByCompetitor={statusByCompetitor}
+              tieHighlightsByCompetitor={tieHighlightsByCompetitor}
+              onChange={changeScore}
+            />
+          ) : null}
           {activeView === "derived" ? <DerivedList marks={activeMarks.marks} /> : null}
           {activeView === "name" ? (
-            <NameScoreList role={activeRole} scores={activeScores} statusByCompetitor={statusByCompetitor} onChange={changeScore} />
+            <NameScoreList
+              role={activeRole}
+              scores={activeScores}
+              statusByCompetitor={statusByCompetitor}
+              tieHighlightsByCompetitor={tieHighlightsByCompetitor}
+              onChange={changeScore}
+            />
           ) : null}
         </Panel>
 
@@ -194,11 +245,13 @@ function HeatScoreList({
   role,
   scores,
   statusByCompetitor,
+  tieHighlightsByCompetitor,
   onChange
 }: {
   role: Role;
   scores: RawScore[];
   statusByCompetitor: Map<string, "yes" | "alt" | "no">;
+  tieHighlightsByCompetitor: Map<string, ScoreTieHighlight>;
   onChange: (subjectId: string, scoreX2: number) => void;
 }) {
   return (
@@ -210,6 +263,7 @@ function HeatScoreList({
             scores={scores}
             subjectIds={demoHeatEntries.filter((entry) => entry.heatNumber === heat && entry.role === role).map((entry) => entry.competitorId)}
             statusByCompetitor={statusByCompetitor}
+            tieHighlightsByCompetitor={tieHighlightsByCompetitor}
             onChange={onChange}
           />
         </section>
@@ -221,25 +275,38 @@ function HeatScoreList({
 function RankScoreList({
   scores,
   statusByCompetitor,
+  tieHighlightsByCompetitor,
   onChange
 }: {
   scores: RawScore[];
   statusByCompetitor: Map<string, "yes" | "alt" | "no">;
+  tieHighlightsByCompetitor: Map<string, ScoreTieHighlight>;
   onChange: (subjectId: string, scoreX2: number) => void;
 }) {
   const subjectIds = scores.slice().sort((a, b) => b.scoreX2 - a.scoreX2).map((score) => score.subjectId);
-  return <ScoreRows scores={scores} subjectIds={subjectIds} statusByCompetitor={statusByCompetitor} onChange={onChange} showRank />;
+  return (
+    <ScoreRows
+      scores={scores}
+      subjectIds={subjectIds}
+      statusByCompetitor={statusByCompetitor}
+      tieHighlightsByCompetitor={tieHighlightsByCompetitor}
+      onChange={onChange}
+      showRank
+    />
+  );
 }
 
 function NameScoreList({
   role,
   scores,
   statusByCompetitor,
+  tieHighlightsByCompetitor,
   onChange
 }: {
   role: Role;
   scores: RawScore[];
   statusByCompetitor: Map<string, "yes" | "alt" | "no">;
+  tieHighlightsByCompetitor: Map<string, ScoreTieHighlight>;
   onChange: (subjectId: string, scoreX2: number) => void;
 }) {
   const subjectIds = demoCompetitors
@@ -247,19 +314,29 @@ function NameScoreList({
     .filter((competitor) => competitor.role === role)
     .sort((a, b) => a.preferredName.localeCompare(b.preferredName))
     .map((competitor) => competitor.id);
-  return <ScoreRows scores={scores} subjectIds={subjectIds} statusByCompetitor={statusByCompetitor} onChange={onChange} />;
+  return (
+    <ScoreRows
+      scores={scores}
+      subjectIds={subjectIds}
+      statusByCompetitor={statusByCompetitor}
+      tieHighlightsByCompetitor={tieHighlightsByCompetitor}
+      onChange={onChange}
+    />
+  );
 }
 
 function ScoreRows({
   scores,
   subjectIds,
   statusByCompetitor,
+  tieHighlightsByCompetitor,
   onChange,
   showRank = false
 }: {
   scores: RawScore[];
   subjectIds: string[];
   statusByCompetitor: Map<string, "yes" | "alt" | "no">;
+  tieHighlightsByCompetitor: Map<string, ScoreTieHighlight>;
   onChange: (subjectId: string, scoreX2: number) => void;
   showRank?: boolean;
 }) {
@@ -276,6 +353,7 @@ function ScoreRows({
             rank={showRank ? index + 1 : undefined}
             scoreX2={score.scoreX2}
             statusTone={score.scoreX2 === 0 ? "neutral" : statusByCompetitor.get(subjectId) ?? "neutral"}
+            tieHighlight={tieHighlightsByCompetitor.get(subjectId)}
             onChange={(next) => onChange(subjectId, next)}
           />
         );
@@ -320,6 +398,14 @@ function seedScoresForJudge(judgeId: string): RawScore[] {
 
 function rolePlural(role: Role) {
   return role === "Leader" ? "Leaders" : "Followers";
+}
+
+function formatTieWarning(role: Role, tie: BoundaryTie, label: string) {
+  const bibs = tie.subjectIds
+    .map((subjectId) => demoCompetitors.find((competitor) => competitor.id === subjectId)?.bibNumber ?? subjectId)
+    .join(", ");
+  const scoreText = tie.score !== undefined ? ` at ${formatScore(tie.score)}` : "";
+  return `${label}: ${role} ${tie.kind} boundary tie at ${tie.boundary}${scoreText}; tied bibs ${bibs}.`;
 }
 
 function viewTitle(view: JudgeView) {

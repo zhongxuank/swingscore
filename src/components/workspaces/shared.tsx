@@ -7,6 +7,13 @@ import { CheckCircle2, Loader2, Signal, SignalZero } from "lucide-react";
 import type { Competitor, Couple, RawScore, SaveState } from "@/lib/types";
 import { formatScore } from "@/lib/scoring/score-utils";
 
+export type TieHighlightTone = "rose" | "sky" | "violet" | "teal";
+
+export interface ScoreTieHighlight {
+  label: string;
+  tone: TieHighlightTone;
+}
+
 export function AppFrame({
   eyebrow,
   title,
@@ -138,7 +145,8 @@ export function ScoreSwipeRow({
   scoreX2,
   onChange,
   label,
-  statusTone = "neutral"
+  statusTone = "neutral",
+  tieHighlight
 }: {
   competitor: Competitor;
   rank?: number;
@@ -146,6 +154,7 @@ export function ScoreSwipeRow({
   onChange: (scoreX2: number) => void;
   label?: string;
   statusTone?: "neutral" | "yes" | "alt" | "no";
+  tieHighlight?: ScoreTieHighlight;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<{
@@ -258,6 +267,8 @@ export function ScoreSwipeRow({
       role="slider"
       tabIndex={0}
       data-score-status={scoreX2 === 0 ? "unscored" : statusTone}
+      data-score-tie={tieHighlight ? "true" : "false"}
+      data-score-tie-group={tieHighlight?.label ?? ""}
       aria-label={label ?? `Score ${competitor.preferredName}`}
       aria-valuemin={0}
       aria-valuemax={100}
@@ -268,7 +279,10 @@ export function ScoreSwipeRow({
       onPointerUp={endGesture}
       onPointerCancel={endGesture}
       onKeyDown={handleKeyDown}
-      className="relative min-h-[76px] cursor-ew-resize overflow-hidden rounded-[8px] border border-graphite/10 bg-paper p-3 shadow-sm touch-pan-y select-none"
+      className={clsx(
+        "relative min-h-[76px] cursor-ew-resize overflow-hidden rounded-[8px] border p-3 shadow-sm touch-pan-y select-none",
+        tieHighlight ? tieRowClass(tieHighlight.tone) : "border-graphite/10 bg-paper"
+      )}
       style={{ touchAction: "pan-y" }}
     >
       <div
@@ -288,13 +302,33 @@ export function ScoreSwipeRow({
           </div>
           <p className="mt-1 truncate text-sm font-black text-graphite/70">{competitor.preferredName}</p>
         </div>
-        <div className="rounded-[6px] bg-chalk/85 px-3 py-2 text-right shadow-sm">
+        <div
+          className={clsx(
+            "rounded-[6px] px-3 py-2 text-right shadow-sm",
+            tieHighlight ? tieScoreClass(tieHighlight.tone) : "bg-chalk/85"
+          )}
+        >
           <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-graphite/45">Score</p>
           <p className="font-display text-2xl font-black leading-none text-ink">{formatScore(scoreX2)}</p>
+          {tieHighlight ? <p className="mt-1 font-mono text-[10px] font-black uppercase text-graphite">{tieHighlight.label}</p> : null}
         </div>
       </div>
     </div>
   );
+}
+
+function tieRowClass(tone: TieHighlightTone) {
+  if (tone === "sky") return "border-sky-600/75 bg-sky-100/70 ring-2 ring-sky-500/45";
+  if (tone === "violet") return "border-violet-600/75 bg-violet-100/70 ring-2 ring-violet-500/45";
+  if (tone === "teal") return "border-teal-700/75 bg-teal-100/70 ring-2 ring-teal-500/45";
+  return "border-oxblood/75 bg-oxblood/10 ring-2 ring-oxblood/45";
+}
+
+function tieScoreClass(tone: TieHighlightTone) {
+  if (tone === "sky") return "bg-sky-100 ring-2 ring-sky-500/65";
+  if (tone === "violet") return "bg-violet-100 ring-2 ring-violet-500/65";
+  if (tone === "teal") return "bg-teal-100 ring-2 ring-teal-500/65";
+  return "bg-oxblood/15 ring-2 ring-oxblood/60";
 }
 
 function scoreFillClass(statusTone: "neutral" | "yes" | "alt" | "no") {
