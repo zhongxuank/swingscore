@@ -12,6 +12,9 @@ test("admin demo exposes live-alpha workflow", async ({ page }) => {
 test("judge can score and submit demo sheet", async ({ page }) => {
   await page.goto("/judge/demo-judge");
   await expect(page.getByRole("heading", { name: /novice jack and jill/i })).toBeVisible();
+  await expect(page.locator('[role="slider"]')).toHaveCount(16);
+  await expect(page.locator('input[type="number"]')).toHaveCount(0);
+  await expect(page.getByRole("slider", { name: "Score Alex" })).toContainText("Swipe sideways to score");
   await page.getByRole("button", { name: /results/i }).click();
   await expect(page.getByText("Derived callbacks")).toBeVisible();
 });
