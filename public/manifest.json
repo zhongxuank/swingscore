@@ -1,0 +1,16 @@
+{
+  "name": "SwingScore",
+  "short_name": "SwingScore",
+  "description": "Live West Coast Swing competition scoring.",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#f7f3ec",
+  "theme_color": "#26302c",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
