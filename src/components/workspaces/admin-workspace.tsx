@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, FileSpreadsheet, Gavel, Smartphone } from "lucide-react";
 import {
   demoChiefScores,
@@ -9,12 +9,18 @@ import {
   demoCouples,
   demoFinalScores,
   demoHeatEntries,
+  demoDefaultJudgeAssignments,
+  demoJudgeAccessLinks,
+  demoJudgeAssignmentStorageKey,
   demoJudges,
   demoPrelimScores,
   demoRound,
+  isJudgeAssignmentRole,
+  roleAssignmentAllows,
+  roleAssignmentLabel,
   sampleCsv
 } from "@/lib/data/demo-data";
-import type { Competitor, RawScore, Role, RoundConfig } from "@/lib/types";
+import type { Competitor, JudgeAssignmentRole, RawScore, Role, RoundConfig } from "@/lib/types";
 import { parseCompetitorCsv } from "@/lib/scoring/csv";
 import { advancementCsv, placementsCsv, rawScoresCsv } from "@/lib/scoring/exports";
 import { calculatePrelimAdvancement } from "@/lib/scoring/prelims";
@@ -33,6 +39,12 @@ const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: "exports", label: "Exports" }
 ];
 
+const assignmentOptions: Array<{ value: JudgeAssignmentRole; label: string }> = [
+  { value: "leaders", label: "L" },
+  { value: "followers", label: "F" },
+  { value: "both", label: "Both" }
+];
+
 export function AdminWorkspace({ competitionId }: { competitionId: string }) {
   const [activeTab, setActiveTab] = useState<AdminTab>("setup");
   const [round, setRound] = useState<RoundConfig>(demoRound);
@@ -41,14 +53,37 @@ export function AdminWorkspace({ competitionId }: { competitionId: string }) {
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [panelScores] = useState<RawScore[]>(demoPrelimScores);
   const [chiefScores] = useState<RawScore[]>(demoChiefScores);
+  const [judgeAssignments, setJudgeAssignments] = useState<Record<string, JudgeAssignmentRole>>({ ...demoDefaultJudgeAssignments });
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(demoJudgeAssignmentStorageKey);
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored) as Record<string, unknown>;
+      const nextAssignments = { ...demoDefaultJudgeAssignments };
+      for (const [judgeId, assignment] of Object.entries(parsed)) {
+        if (isJudgeAssignmentRole(assignment)) {
+          nextAssignments[judgeId] = assignment;
+        }
+      }
+      setJudgeAssignments(nextAssignments);
+    } catch {
+      window.localStorage.removeItem(demoJudgeAssignmentStorageKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(demoJudgeAssignmentStorageKey, JSON.stringify(judgeAssignments));
+  }, [judgeAssignments]);
 
   const leaderResults = useMemo(
-    () => calculateRoleAdvancement("Leader", competitors, panelScores, chiefScores, round),
-    [competitors, panelScores, chiefScores, round]
+    () => calculateRoleAdvancement("Leader", competitors, panelScores, chiefScores, round, judgeAssignments),
+    [competitors, panelScores, chiefScores, round, judgeAssignments]
   );
   const followerResults = useMemo(
-    () => calculateRoleAdvancement("Follower", competitors, panelScores, chiefScores, round),
-    [competitors, panelScores, chiefScores, round]
+    () => calculateRoleAdvancement("Follower", competitors, panelScores, chiefScores, round, judgeAssignments),
+    [competitors, panelScores, chiefScores, round, judgeAssignments]
   );
   const finalPlacements = useMemo(() => {
     const sheets = demoJudges
@@ -107,27 +142,28 @@ export function AdminWorkspace({ competitionId }: { competitionId: string }) {
               <Field label="Division" value={demoCompetition.division} />
               <Field label="Status" value={demoCompetition.status} />
               <NumberField
-                label="Required Yeses"
+                label="Required Yeses per role"
                 value={round.requiredYeses}
                 onChange={(value) => setRound((current) => ({ ...current, requiredYeses: value }))}
               />
               <NumberField
-                label="Required alternates"
+                label="Required alternates per role"
                 value={round.requiredAlts}
                 onChange={(value) => setRound((current) => ({ ...current, requiredAlts: value }))}
               />
               <NumberField
-                label="Advancing per role"
+                label="Callbacks per role"
                 value={round.advancementCount}
                 onChange={(value) => setRound((current) => ({ ...current, advancementCount: value }))}
               />
+              <Field label="Callback total" value={`${round.advancementCount} Leaders + ${round.advancementCount} Followers`} />
               <Field label="CJ scoring" value="Raw scores: tiebreak only" />
             </div>
           </Panel>
           <Panel title="Live links">
             <div className="grid gap-3">
               {[
-                ["/judge/demo-judge", "Judge link"],
+                ...demoJudgeAccessLinks.map((link) => [link.href, link.label]),
                 ["/chief/demo-chief", "Chief Judge link"],
                 ["/emcee/demo-emcee", "Emcee link"],
                 ["/export/demo-novice-jj", "Export center"]
@@ -178,16 +214,38 @@ export function AdminWorkspace({ competitionId }: { competitionId: string }) {
       {activeTab === "judges" ? (
         <Panel title="Judging panel">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {demoJudges.map((judge) => (
-              <article key={judge.id} className="rounded-[8px] border border-graphite/15 bg-paper p-4">
-                <Gavel className="text-brass" size={20} />
-                <h3 className="mt-3 font-black">{judge.name}</h3>
-                <p className="mt-1 text-sm text-graphite/70">{judge.roleAssignment}</p>
-                <p className="mt-3 rounded-full bg-bluepaper px-3 py-1 text-xs font-bold uppercase text-graphite">
-                  {judge.isChiefJudge ? "Chief Judge raw scores" : "Panel raw scores"}
-                </p>
-              </article>
-            ))}
+            {demoJudges.map((judge) => {
+              const assignment = judgeAssignments[judge.id] ?? judge.roleAssignment;
+              return (
+                <article key={judge.id} className="rounded-[8px] border border-graphite/15 bg-paper p-4">
+                  <Gavel className="text-brass" size={20} />
+                  <h3 className="mt-3 font-black">{judge.name}</h3>
+                  <p className="mt-1 text-sm font-bold text-graphite/75">{roleAssignmentLabel(assignment)}</p>
+                  <p className="mt-3 rounded-full bg-bluepaper px-3 py-1 text-xs font-bold uppercase text-graphite">
+                    {judge.isChiefJudge ? "Chief Judge raw scores" : "Panel raw scores"}
+                  </p>
+                  {judge.isChiefJudge ? (
+                    <p className="mt-4 text-xs font-bold text-graphite/60">Chief Judge access includes both role sheets.</p>
+                  ) : (
+                    <div className="mt-4 grid grid-cols-3 gap-1 rounded-[6px] border border-graphite/15 bg-chalk p-1">
+                      {assignmentOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={assignment === option.value}
+                          onClick={() => setJudgeAssignments((current) => ({ ...current, [judge.id]: option.value }))}
+                          className={`min-h-9 rounded-[5px] text-sm font-black ${
+                            assignment === option.value ? "bg-graphite text-paper" : "bg-transparent text-graphite hover:bg-paper"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
           </div>
         </Panel>
       ) : null}
@@ -258,12 +316,13 @@ function calculateRoleAdvancement(
   competitors: Competitor[],
   panelScores: RawScore[],
   chiefScores: RawScore[],
-  round: RoundConfig
+  round: RoundConfig,
+  judgeAssignments: Record<string, JudgeAssignmentRole>
 ) {
   const roleCompetitors = competitors.filter((competitor) => competitor.role === role);
   return calculatePrelimAdvancement({
     competitors: roleCompetitors,
-    panelScores: panelScores.filter((score) => score.role === role),
+    panelScores: panelScores.filter((score) => score.role === role && roleAssignmentAllows(judgeAssignments[score.judgeId] ?? "both", role)),
     chiefScores: chiefScores.filter((score) => score.role === role),
     requiredYeses: round.requiredYeses,
     requiredAlts: round.requiredAlts,

@@ -1,9 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FileDown, ShieldAlert } from "lucide-react";
-import { demoChiefScores, demoCompetitors, demoJudges, demoPrelimScores, demoRound } from "@/lib/data/demo-data";
-import type { RawScore, Role } from "@/lib/types";
+import {
+  demoChiefScores,
+  demoCompetitors,
+  demoDefaultJudgeAssignments,
+  demoJudgeAssignmentStorageKey,
+  demoJudges,
+  demoPrelimScores,
+  demoRound,
+  isJudgeAssignmentRole,
+  roleAssignmentAllows
+} from "@/lib/data/demo-data";
+import type { JudgeAssignmentRole, RawScore, Role } from "@/lib/types";
 import { advancementCsv, rawScoresCsv } from "@/lib/scoring/exports";
 import { calculatePrelimAdvancement } from "@/lib/scoring/prelims";
 import { AppFrame, NavButton, Panel, ScoreSwipeRow, competitorLabel, updateScore } from "@/components/workspaces/shared";
@@ -11,9 +21,28 @@ import { AppFrame, NavButton, Panel, ScoreSwipeRow, competitorLabel, updateScore
 export function ChiefWorkspace({ token }: { token: string }) {
   const [chiefScores, setChiefScores] = useState<RawScore[]>(demoChiefScores);
   const [finalized, setFinalized] = useState(false);
+  const [judgeAssignments, setJudgeAssignments] = useState<Record<string, JudgeAssignmentRole>>({ ...demoDefaultJudgeAssignments });
 
-  const leaders = useMemo(() => calculateRole("Leader", chiefScores), [chiefScores]);
-  const followers = useMemo(() => calculateRole("Follower", chiefScores), [chiefScores]);
+  useEffect(() => {
+    const stored = window.localStorage.getItem(demoJudgeAssignmentStorageKey);
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored) as Record<string, unknown>;
+      const nextAssignments = { ...demoDefaultJudgeAssignments };
+      for (const [judgeId, assignment] of Object.entries(parsed)) {
+        if (isJudgeAssignmentRole(assignment)) {
+          nextAssignments[judgeId] = assignment;
+        }
+      }
+      setJudgeAssignments(nextAssignments);
+    } catch {
+      window.localStorage.removeItem(demoJudgeAssignmentStorageKey);
+    }
+  }, []);
+
+  const leaders = useMemo(() => calculateRole("Leader", chiefScores, judgeAssignments), [chiefScores, judgeAssignments]);
+  const followers = useMemo(() => calculateRole("Follower", chiefScores, judgeAssignments), [chiefScores, judgeAssignments]);
   const allTies = [...leaders.ties, ...followers.ties];
   const allRows = [...leaders.rows, ...followers.rows];
 
@@ -143,10 +172,10 @@ export function ChiefWorkspace({ token }: { token: string }) {
   );
 }
 
-function calculateRole(role: Role, chiefScores: RawScore[]) {
+function calculateRole(role: Role, chiefScores: RawScore[], judgeAssignments: Record<string, JudgeAssignmentRole>) {
   return calculatePrelimAdvancement({
     competitors: demoCompetitors.filter((competitor) => competitor.role === role),
-    panelScores: demoPrelimScores.filter((score) => score.role === role),
+    panelScores: demoPrelimScores.filter((score) => score.role === role && roleAssignmentAllows(judgeAssignments[score.judgeId] ?? "both", role)),
     chiefScores: chiefScores.filter((score) => score.role === role),
     requiredYeses: demoRound.requiredYeses,
     requiredAlts: demoRound.requiredAlts,

@@ -1,4 +1,4 @@
-import type { Competition, Competitor, Couple, HeatEntry, Judge, RawScore, RoundConfig } from "@/lib/types";
+import type { Competition, Competitor, Couple, HeatEntry, Judge, JudgeAssignmentRole, RawScore, Role, RoundConfig } from "@/lib/types";
 
 export const demoCompetition: Competition = {
   id: "demo-novice-jj",
@@ -40,12 +40,62 @@ export const demoCompetitors: Competitor[] = [
 ];
 
 export const demoJudges: Judge[] = [
-  { id: "judge-1", name: "Judge One", roleAssignment: "both" },
-  { id: "judge-2", name: "Judge Two", roleAssignment: "both" },
+  { id: "judge-1", name: "Judge One", roleAssignment: "leaders" },
+  { id: "judge-2", name: "Judge Two", roleAssignment: "followers" },
   { id: "judge-3", name: "Judge Three", roleAssignment: "both" },
   { id: "judge-4", name: "Judge Four", roleAssignment: "both" },
   { id: "chief", name: "Chief Judge", roleAssignment: "both", isChiefJudge: true }
 ];
+
+export const demoJudgeAccessLinks: Array<{
+  token: string;
+  href: string;
+  label: string;
+  judgeId: string;
+  roleAssignment: JudgeAssignmentRole;
+}> = [
+  {
+    token: "demo-judge",
+    href: "/judge/demo-judge",
+    label: "Judge One - Leaders",
+    judgeId: "judge-1",
+    roleAssignment: "leaders"
+  },
+  {
+    token: "demo-follower",
+    href: "/judge/demo-follower",
+    label: "Judge Two - Followers",
+    judgeId: "judge-2",
+    roleAssignment: "followers"
+  },
+  {
+    token: "demo-both",
+    href: "/judge/demo-both",
+    label: "Judge Three - Both roles",
+    judgeId: "judge-3",
+    roleAssignment: "both"
+  }
+];
+
+export const demoJudgeAssignmentStorageKey = "swingscore.demo.judgeAssignments";
+
+export const demoDefaultJudgeAssignments = Object.fromEntries(
+  demoJudges.map((judge) => [judge.id, judge.roleAssignment])
+) as Record<string, JudgeAssignmentRole>;
+
+export function isJudgeAssignmentRole(value: unknown): value is JudgeAssignmentRole {
+  return value === "leaders" || value === "followers" || value === "both";
+}
+
+export function roleAssignmentAllows(assignment: JudgeAssignmentRole, role: Role) {
+  return assignment === "both" || (assignment === "leaders" && role === "Leader") || (assignment === "followers" && role === "Follower");
+}
+
+export function roleAssignmentLabel(assignment: JudgeAssignmentRole) {
+  if (assignment === "leaders") return "Leaders";
+  if (assignment === "followers") return "Followers";
+  return "Leaders and Followers";
+}
 
 export const demoHeatEntries: HeatEntry[] = [
   ...demoCompetitors.map((competitor, index) => ({
@@ -60,7 +110,7 @@ export const demoHeatEntries: HeatEntry[] = [
 export const demoPrelimScores: RawScore[] = demoJudges
   .filter((judge) => !judge.isChiefJudge)
   .flatMap((judge, judgeIndex) =>
-    demoCompetitors.map((competitor, competitorIndex) => {
+    demoCompetitors.filter((competitor) => roleAssignmentAllows(judge.roleAssignment, competitor.role)).map((competitor, competitorIndex) => {
       const roleOffset = competitor.role === "Leader" ? 0 : 3;
       const seed = 88 - competitorIndex * 1.5 + judgeIndex * 0.5 + roleOffset;
       return {

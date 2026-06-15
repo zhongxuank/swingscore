@@ -2,8 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, ListOrdered, Rows3, Search, Trophy } from "lucide-react";
-import { demoCompetition, demoCompetitors, demoHeatEntries, demoPrelimScores, demoRound } from "@/lib/data/demo-data";
-import type { RawScore, SaveState } from "@/lib/types";
+import {
+  demoCompetition,
+  demoCompetitors,
+  demoDefaultJudgeAssignments,
+  demoHeatEntries,
+  demoJudgeAccessLinks,
+  demoJudgeAssignmentStorageKey,
+  demoPrelimScores,
+  demoRound,
+  isJudgeAssignmentRole,
+  roleAssignmentAllows,
+  roleAssignmentLabel
+} from "@/lib/data/demo-data";
+import type { JudgeAssignmentRole, RawScore, Role, SaveState } from "@/lib/types";
 import { deriveJudgePrelimMarks } from "@/lib/scoring/prelims";
 import { validateScoreSheet } from "@/lib/scoring/score-utils";
 import { AppFrame, Panel, ScoreSwipeRow, StatusPill, competitorLabel, updateScore } from "@/components/workspaces/shared";
@@ -18,11 +30,50 @@ const judgeViews: Array<{ id: JudgeView; label: string; icon: React.ComponentTyp
 ];
 
 export function JudgeWorkspace({ token }: { token: string }) {
-  const judgeId = "judge-1";
-  const [scores, setScores] = useState<RawScore[]>(demoPrelimScores.filter((score) => score.judgeId === judgeId));
+  const accessLink = useMemo(() => demoJudgeAccessLinks.find((link) => link.token === token) ?? demoJudgeAccessLinks[0], [token]);
+  const [judgeAssignments, setJudgeAssignments] = useState<Record<string, JudgeAssignmentRole>>({ ...demoDefaultJudgeAssignments });
+  const [scores, setScores] = useState<RawScore[]>(() => seedScoresForJudge(accessLink.judgeId));
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [activeView, setActiveView] = useState<JudgeView>("heat");
-  const [submitted, setSubmitted] = useState(false);
+  const [submittedRoles, setSubmittedRoles] = useState<Record<Role, boolean>>({ Leader: false, Follower: false });
+  const accessAssignment = judgeAssignments[accessLink.judgeId] ?? accessLink.roleAssignment;
+  const allowedRoles = useMemo<Role[]>(
+    () => (["Leader", "Follower"] as Role[]).filter((role) => roleAssignmentAllows(accessAssignment, role)),
+    [accessAssignment]
+  );
+  const [activeRole, setActiveRole] = useState<Role>(() => (roleAssignmentAllows(accessLink.roleAssignment, "Leader") ? "Leader" : "Follower"));
+  const activeScores = useMemo(() => scores.filter((score) => score.role === activeRole), [activeRole, scores]);
+  const activeCompetitors = useMemo(() => demoCompetitors.filter((competitor) => competitor.role === activeRole), [activeRole]);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(demoJudgeAssignmentStorageKey);
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored) as Record<string, unknown>;
+      const nextAssignments = { ...demoDefaultJudgeAssignments };
+      for (const [judgeId, assignment] of Object.entries(parsed)) {
+        if (isJudgeAssignmentRole(assignment)) {
+          nextAssignments[judgeId] = assignment;
+        }
+      }
+      setJudgeAssignments(nextAssignments);
+    } catch {
+      window.localStorage.removeItem(demoJudgeAssignmentStorageKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    setScores(seedScoresForJudge(accessLink.judgeId));
+    setSubmittedRoles({ Leader: false, Follower: false });
+    setSaveState("saved");
+  }, [accessLink.judgeId]);
+
+  useEffect(() => {
+    if (allowedRoles.length > 0 && !allowedRoles.includes(activeRole)) {
+      setActiveRole(allowedRoles[0]);
+    }
+  }, [activeRole, allowedRoles]);
 
   useEffect(() => {
     if (saveState !== "saving") return;
@@ -30,55 +81,43 @@ export function JudgeWorkspace({ token }: { token: string }) {
     return () => window.clearTimeout(timeout);
   }, [saveState]);
 
-  const leaderMarks = useMemo(
+  const activeMarks = useMemo(
     () =>
       deriveJudgePrelimMarks({
-        competitors: demoCompetitors.filter((competitor) => competitor.role === "Leader"),
-        scores: scores.filter((score) => score.role === "Leader"),
+        competitors: activeCompetitors,
+        scores: activeScores,
         requiredYeses: demoRound.requiredYeses,
         requiredAlts: demoRound.requiredAlts
       }),
-    [scores]
-  );
-  const followerMarks = useMemo(
-    () =>
-      deriveJudgePrelimMarks({
-        competitors: demoCompetitors.filter((competitor) => competitor.role === "Follower"),
-        scores: scores.filter((score) => score.role === "Follower"),
-        requiredYeses: demoRound.requiredYeses,
-        requiredAlts: demoRound.requiredAlts
-      }),
-    [scores]
+    [activeCompetitors, activeScores]
   );
 
   const validationErrors = [
-    ...validateScoreSheet(scores.filter((score) => score.role === "Leader"), false),
-    ...validateScoreSheet(scores.filter((score) => score.role === "Follower"), false),
-    ...leaderMarks.ties.map((tie) => `Leader ${tie.kind} boundary tie at ${tie.boundary}.`),
-    ...followerMarks.ties.map((tie) => `Follower ${tie.kind} boundary tie at ${tie.boundary}.`)
+    ...validateScoreSheet(activeScores, false),
+    ...activeMarks.ties.map((tie) => `${activeRole} ${tie.kind} boundary tie at ${tie.boundary}.`)
   ];
   const statusByCompetitor = useMemo(
     () =>
       new Map(
-        [...leaderMarks.marks, ...followerMarks.marks].map((mark) => [
+        activeMarks.marks.map((mark) => [
           mark.competitorId,
           mark.status === "yes" ? "yes" : mark.status === "alt" ? "alt" : "no"
         ] as const)
       ),
-    [leaderMarks.marks, followerMarks.marks]
+    [activeMarks.marks]
   );
 
   function changeScore(subjectId: string, scoreX2: number) {
-    setScores((current) => updateScore(current, subjectId, scoreX2, judgeId));
+    setScores((current) => updateScore(current, subjectId, scoreX2, accessLink.judgeId));
     setSaveState(window.navigator.onLine ? "saving" : "offline");
-    setSubmitted(false);
+    setSubmittedRoles((current) => ({ ...current, [activeRole]: false }));
   }
 
   return (
     <AppFrame
       eyebrow={`Judge link / ${token}`}
       title={demoCompetition.division}
-      subtitle="Enter raw scores only. SwingScore derives callbacks, alternates, rankings, and submit validation."
+      subtitle={`Assigned sheet: ${roleAssignmentLabel(accessAssignment)}. Enter raw scores only; callbacks and alternates are calculated per role.`}
       actions={<StatusPill state={saveState} />}
     >
       <div className="mx-auto max-w-3xl">
@@ -98,11 +137,36 @@ export function JudgeWorkspace({ token }: { token: string }) {
           ))}
         </nav>
 
-        <Panel title={viewTitle(activeView)}>
-          {activeView === "heat" ? <HeatScoreList scores={scores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
-          {activeView === "rank" ? <RankScoreList scores={scores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
-          {activeView === "derived" ? <DerivedList marks={[...leaderMarks.marks, ...followerMarks.marks]} /> : null}
-          {activeView === "name" ? <NameScoreList scores={scores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
+        {allowedRoles.length > 1 ? (
+          <div
+            data-testid="judge-role-toggle"
+            className="no-print mb-3 grid grid-cols-2 gap-1 rounded-[8px] border border-graphite/15 bg-chalk p-1 shadow-sm"
+          >
+            {(["Leader", "Follower"] as Role[]).map((role) => (
+              <button
+                key={role}
+                type="button"
+                aria-pressed={activeRole === role}
+                onClick={() => setActiveRole(role)}
+                className={`min-h-11 rounded-[6px] text-sm font-black ${
+                  activeRole === role ? "bg-graphite text-paper" : "bg-paper text-graphite hover:bg-bluepaper"
+                }`}
+              >
+                {rolePlural(role)}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <Panel title={`${viewTitle(activeView)} / ${rolePlural(activeRole)}`}>
+          {activeView === "heat" ? (
+            <HeatScoreList role={activeRole} scores={activeScores} statusByCompetitor={statusByCompetitor} onChange={changeScore} />
+          ) : null}
+          {activeView === "rank" ? <RankScoreList scores={activeScores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
+          {activeView === "derived" ? <DerivedList marks={activeMarks.marks} /> : null}
+          {activeView === "name" ? (
+            <NameScoreList role={activeRole} scores={activeScores} statusByCompetitor={statusByCompetitor} onChange={changeScore} />
+          ) : null}
         </Panel>
 
         <div data-testid="judge-action-panel" className="no-print mt-3 rounded-[8px] border border-graphite/15 bg-chalk p-3 shadow-sm">
@@ -114,11 +178,11 @@ export function JudgeWorkspace({ token }: { token: string }) {
           <button
             type="button"
             disabled={validationErrors.length > 0}
-            onClick={() => setSubmitted(true)}
+            onClick={() => setSubmittedRoles((current) => ({ ...current, [activeRole]: true }))}
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[6px] bg-graphite px-4 py-3 text-base font-black text-paper disabled:cursor-not-allowed disabled:bg-graphite/35"
           >
             <Check size={19} />
-            {submitted ? "Submitted" : "Submit scores"}
+            {submittedRoles[activeRole] ? `${rolePlural(activeRole)} submitted` : `Submit ${rolePlural(activeRole).toLowerCase()} scores`}
           </button>
         </div>
       </div>
@@ -127,10 +191,12 @@ export function JudgeWorkspace({ token }: { token: string }) {
 }
 
 function HeatScoreList({
+  role,
   scores,
   statusByCompetitor,
   onChange
 }: {
+  role: Role;
   scores: RawScore[];
   statusByCompetitor: Map<string, "yes" | "alt" | "no">;
   onChange: (subjectId: string, scoreX2: number) => void;
@@ -142,7 +208,7 @@ function HeatScoreList({
           <h3 className="mb-2 font-mono text-xs font-black uppercase tracking-[0.18em] text-graphite/55">Heat {heat}</h3>
           <ScoreRows
             scores={scores}
-            subjectIds={demoHeatEntries.filter((entry) => entry.heatNumber === heat).map((entry) => entry.competitorId)}
+            subjectIds={demoHeatEntries.filter((entry) => entry.heatNumber === heat && entry.role === role).map((entry) => entry.competitorId)}
             statusByCompetitor={statusByCompetitor}
             onChange={onChange}
           />
@@ -166,16 +232,19 @@ function RankScoreList({
 }
 
 function NameScoreList({
+  role,
   scores,
   statusByCompetitor,
   onChange
 }: {
+  role: Role;
   scores: RawScore[];
   statusByCompetitor: Map<string, "yes" | "alt" | "no">;
   onChange: (subjectId: string, scoreX2: number) => void;
 }) {
   const subjectIds = demoCompetitors
     .slice()
+    .filter((competitor) => competitor.role === role)
     .sort((a, b) => a.preferredName.localeCompare(b.preferredName))
     .map((competitor) => competitor.id);
   return <ScoreRows scores={scores} subjectIds={subjectIds} statusByCompetitor={statusByCompetitor} onChange={onChange} />;
@@ -239,6 +308,18 @@ function DerivedList({
         })}
     </div>
   );
+}
+
+function seedScoresForJudge(judgeId: string): RawScore[] {
+  const existingScores = demoPrelimScores.filter((score) => score.judgeId === judgeId);
+  return demoCompetitors.map((competitor) => {
+    const score = existingScores.find((item) => item.subjectId === competitor.id);
+    return score ?? { judgeId, subjectId: competitor.id, role: competitor.role, scoreX2: 0 };
+  });
+}
+
+function rolePlural(role: Role) {
+  return role === "Leader" ? "Leaders" : "Followers";
 }
 
 function viewTitle(view: JudgeView) {
