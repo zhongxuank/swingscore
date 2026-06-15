@@ -138,7 +138,6 @@ export function ScoreSwipeRow({
   scoreX2,
   onChange,
   label,
-  instruction = "Swipe sideways to score. Swipe up or down to scroll.",
   statusTone = "neutral"
 }: {
   competitor: Competitor;
@@ -146,7 +145,6 @@ export function ScoreSwipeRow({
   scoreX2: number;
   onChange: (scoreX2: number) => void;
   label?: string;
-  instruction?: string;
   statusTone?: "neutral" | "yes" | "alt" | "no";
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
@@ -278,13 +276,17 @@ export function ScoreSwipeRow({
         className={clsx("pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-150", fillClass)}
         style={{ width: `${percentage}%` }}
       />
-      <div className="relative grid min-h-[48px] grid-cols-[minmax(0,1fr)_84px] items-center gap-3">
+      <div className="relative grid min-h-[58px] grid-cols-[minmax(0,1fr)_84px] items-center gap-3">
         <div className="min-w-0">
-          <p className="text-base font-black text-graphite">
-            {rank ? <span className="mr-2 font-mono text-brass">{rank}</span> : null}
-            {competitorLabel(competitor)}
-          </p>
-          <p className="mt-1 text-xs font-bold uppercase tracking-wide text-graphite/55">{instruction}</p>
+          <div className="flex min-w-0 items-baseline gap-3">
+            <p className="font-display text-[2.45rem] font-black leading-none text-graphite sm:text-[2.75rem]">{competitor.bibNumber}</p>
+            {rank ? (
+              <span className="rounded-full bg-brass/15 px-2 py-1 font-mono text-xs font-black uppercase text-brass">
+                Rank {rank}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 truncate text-sm font-black text-graphite/70">{competitor.preferredName}</p>
         </div>
         <div className="rounded-[6px] bg-chalk/85 px-3 py-2 text-right shadow-sm">
           <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-graphite/45">Score</p>

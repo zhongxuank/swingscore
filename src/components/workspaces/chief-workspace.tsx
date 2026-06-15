@@ -117,7 +117,6 @@ export function ChiefWorkspace({ token }: { token: string }) {
                           competitor={competitor}
                           scoreX2={score?.scoreX2 ?? 0}
                           label={`Chief Judge score ${competitor.preferredName}`}
-                          instruction="Swipe sideways to set CJ raw score. Swipe up or down to scroll."
                           onChange={(nextScore) => changeScore(competitor.id, nextScore)}
                         />
                       );

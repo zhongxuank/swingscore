@@ -16,7 +16,9 @@ test("judge can score and submit demo sheet", async ({ page }) => {
   await expect(page.locator('[role="slider"]')).toHaveCount(8);
   await expect(page.locator('input[type="number"]')).toHaveCount(0);
   await expect(page.getByRole("slider", { name: "Score Jamie" })).toHaveCount(0);
-  await expect(page.getByRole("slider", { name: "Score Alex" })).toContainText("Swipe sideways to score");
+  await expect(page.getByRole("slider", { name: "Score Alex" })).toContainText("101");
+  await expect(page.getByRole("slider", { name: "Score Alex" })).toContainText("Alex");
+  await expect(page.getByRole("slider", { name: "Score Alex" })).not.toContainText("Swipe sideways");
   await expect(page.getByRole("slider", { name: "Score Alex" })).toHaveAttribute("data-score-status", "yes");
   await page.getByRole("button", { name: /results/i }).click();
   await expect(page.getByText("Derived callbacks")).toBeVisible();
@@ -51,5 +53,7 @@ test("chief judge uses the same raw-score slider interface", async ({ page }) =>
   await expect(page.getByRole("heading", { name: /raw score review/i })).toBeVisible();
   await expect(page.locator('[role="slider"]')).toHaveCount(16);
   await expect(page.locator('input[type="number"]')).toHaveCount(0);
-  await expect(page.getByRole("slider", { name: "Chief Judge score Alex" })).toContainText("Swipe sideways to set CJ raw score");
+  await expect(page.getByRole("slider", { name: "Chief Judge score Alex" })).toContainText("101");
+  await expect(page.getByRole("slider", { name: "Chief Judge score Alex" })).toContainText("Alex");
+  await expect(page.getByRole("slider", { name: "Chief Judge score Alex" })).not.toContainText("Swipe sideways");
 });
