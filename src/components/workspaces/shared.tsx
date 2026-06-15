@@ -138,7 +138,8 @@ export function ScoreSwipeRow({
   scoreX2,
   onChange,
   label,
-  instruction = "Swipe sideways to score. Swipe up or down to scroll."
+  instruction = "Swipe sideways to score. Swipe up or down to scroll.",
+  statusTone = "neutral"
 }: {
   competitor: Competitor;
   rank?: number;
@@ -146,6 +147,7 @@ export function ScoreSwipeRow({
   onChange: (scoreX2: number) => void;
   label?: string;
   instruction?: string;
+  statusTone?: "neutral" | "yes" | "alt" | "no";
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<{
@@ -160,6 +162,7 @@ export function ScoreSwipeRow({
     mode: "idle"
   });
   const percentage = Math.max(0, Math.min(100, (scoreX2 / 200) * 100));
+  const fillClass = scoreX2 === 0 ? "bg-transparent" : scoreFillClass(statusTone);
 
   function scoreFromClientX(clientX: number) {
     const rect = rowRef.current?.getBoundingClientRect();
@@ -256,6 +259,7 @@ export function ScoreSwipeRow({
       ref={rowRef}
       role="slider"
       tabIndex={0}
+      data-score-status={scoreX2 === 0 ? "unscored" : statusTone}
       aria-label={label ?? `Score ${competitor.preferredName}`}
       aria-valuemin={0}
       aria-valuemax={100}
@@ -271,12 +275,9 @@ export function ScoreSwipeRow({
     >
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-0 bg-celadon/30 transition-[width] duration-150"
+        className={clsx("pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-150", fillClass)}
         style={{ width: `${percentage}%` }}
       />
-      <div aria-hidden="true" className="pointer-events-none absolute inset-x-3 bottom-2 h-1.5 rounded-full bg-graphite/10">
-        <div className="h-full rounded-full bg-brass" style={{ width: `${percentage}%` }} />
-      </div>
       <div className="relative grid min-h-[48px] grid-cols-[minmax(0,1fr)_84px] items-center gap-3">
         <div className="min-w-0">
           <p className="text-base font-black text-graphite">
@@ -292,6 +293,13 @@ export function ScoreSwipeRow({
       </div>
     </div>
   );
+}
+
+function scoreFillClass(statusTone: "neutral" | "yes" | "alt" | "no") {
+  if (statusTone === "yes") return "bg-celadon/40";
+  if (statusTone === "alt") return "bg-brass/35";
+  if (statusTone === "no") return "bg-oxblood/20";
+  return "bg-celadon/30";
 }
 
 export function competitorLabel(competitor?: Competitor) {

@@ -57,6 +57,16 @@ export function JudgeWorkspace({ token }: { token: string }) {
     ...leaderMarks.ties.map((tie) => `Leader ${tie.kind} boundary tie at ${tie.boundary}.`),
     ...followerMarks.ties.map((tie) => `Follower ${tie.kind} boundary tie at ${tie.boundary}.`)
   ];
+  const statusByCompetitor = useMemo(
+    () =>
+      new Map(
+        [...leaderMarks.marks, ...followerMarks.marks].map((mark) => [
+          mark.competitorId,
+          mark.status === "yes" ? "yes" : mark.status === "alt" ? "alt" : "no"
+        ] as const)
+      ),
+    [leaderMarks.marks, followerMarks.marks]
+  );
 
   function changeScore(subjectId: string, scoreX2: number) {
     setScores((current) => updateScore(current, subjectId, scoreX2, judgeId));
@@ -88,20 +98,19 @@ export function JudgeWorkspace({ token }: { token: string }) {
           ))}
         </nav>
 
-        {validationErrors.length > 0 ? (
-          <div className="mb-3 rounded-[8px] border border-oxblood/20 bg-oxblood/10 p-3 text-sm font-bold text-oxblood">
-            {validationErrors.join(" ")}
-          </div>
-        ) : null}
-
         <Panel title={viewTitle(activeView)}>
-          {activeView === "heat" ? <HeatScoreList scores={scores} onChange={changeScore} /> : null}
-          {activeView === "rank" ? <RankScoreList scores={scores} onChange={changeScore} /> : null}
+          {activeView === "heat" ? <HeatScoreList scores={scores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
+          {activeView === "rank" ? <RankScoreList scores={scores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
           {activeView === "derived" ? <DerivedList marks={[...leaderMarks.marks, ...followerMarks.marks]} /> : null}
-          {activeView === "name" ? <NameScoreList scores={scores} onChange={changeScore} /> : null}
+          {activeView === "name" ? <NameScoreList scores={scores} statusByCompetitor={statusByCompetitor} onChange={changeScore} /> : null}
         </Panel>
 
-        <div className="no-print sticky bottom-3 mt-3 rounded-[8px] border border-graphite/15 bg-chalk/95 p-3 shadow-panel backdrop-blur">
+        <div data-testid="judge-action-panel" className="no-print mt-3 rounded-[8px] border border-graphite/15 bg-chalk p-3 shadow-sm">
+          {validationErrors.length > 0 ? (
+            <div data-testid="judge-warning" className="mb-3 rounded-[8px] border border-oxblood/20 bg-oxblood/10 p-3 text-sm font-bold text-oxblood">
+              {validationErrors.join(" ")}
+            </div>
+          ) : null}
           <button
             type="button"
             disabled={validationErrors.length > 0}
@@ -117,7 +126,15 @@ export function JudgeWorkspace({ token }: { token: string }) {
   );
 }
 
-function HeatScoreList({ scores, onChange }: { scores: RawScore[]; onChange: (subjectId: string, scoreX2: number) => void }) {
+function HeatScoreList({
+  scores,
+  statusByCompetitor,
+  onChange
+}: {
+  scores: RawScore[];
+  statusByCompetitor: Map<string, "yes" | "alt" | "no">;
+  onChange: (subjectId: string, scoreX2: number) => void;
+}) {
   return (
     <div className="grid gap-4">
       {[1, 2].map((heat) => (
@@ -126,6 +143,7 @@ function HeatScoreList({ scores, onChange }: { scores: RawScore[]; onChange: (su
           <ScoreRows
             scores={scores}
             subjectIds={demoHeatEntries.filter((entry) => entry.heatNumber === heat).map((entry) => entry.competitorId)}
+            statusByCompetitor={statusByCompetitor}
             onChange={onChange}
           />
         </section>
@@ -134,27 +152,45 @@ function HeatScoreList({ scores, onChange }: { scores: RawScore[]; onChange: (su
   );
 }
 
-function RankScoreList({ scores, onChange }: { scores: RawScore[]; onChange: (subjectId: string, scoreX2: number) => void }) {
+function RankScoreList({
+  scores,
+  statusByCompetitor,
+  onChange
+}: {
+  scores: RawScore[];
+  statusByCompetitor: Map<string, "yes" | "alt" | "no">;
+  onChange: (subjectId: string, scoreX2: number) => void;
+}) {
   const subjectIds = scores.slice().sort((a, b) => b.scoreX2 - a.scoreX2).map((score) => score.subjectId);
-  return <ScoreRows scores={scores} subjectIds={subjectIds} onChange={onChange} showRank />;
+  return <ScoreRows scores={scores} subjectIds={subjectIds} statusByCompetitor={statusByCompetitor} onChange={onChange} showRank />;
 }
 
-function NameScoreList({ scores, onChange }: { scores: RawScore[]; onChange: (subjectId: string, scoreX2: number) => void }) {
+function NameScoreList({
+  scores,
+  statusByCompetitor,
+  onChange
+}: {
+  scores: RawScore[];
+  statusByCompetitor: Map<string, "yes" | "alt" | "no">;
+  onChange: (subjectId: string, scoreX2: number) => void;
+}) {
   const subjectIds = demoCompetitors
     .slice()
     .sort((a, b) => a.preferredName.localeCompare(b.preferredName))
     .map((competitor) => competitor.id);
-  return <ScoreRows scores={scores} subjectIds={subjectIds} onChange={onChange} />;
+  return <ScoreRows scores={scores} subjectIds={subjectIds} statusByCompetitor={statusByCompetitor} onChange={onChange} />;
 }
 
 function ScoreRows({
   scores,
   subjectIds,
+  statusByCompetitor,
   onChange,
   showRank = false
 }: {
   scores: RawScore[];
   subjectIds: string[];
+  statusByCompetitor: Map<string, "yes" | "alt" | "no">;
   onChange: (subjectId: string, scoreX2: number) => void;
   showRank?: boolean;
 }) {
@@ -170,6 +206,7 @@ function ScoreRows({
             competitor={competitor}
             rank={showRank ? index + 1 : undefined}
             scoreX2={score.scoreX2}
+            statusTone={score.scoreX2 === 0 ? "neutral" : statusByCompetitor.get(subjectId) ?? "neutral"}
             onChange={(next) => onChange(subjectId, next)}
           />
         );
