@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ClipboardList, RadioTower, ShieldCheck } from "lucide-react";
+import { ArrowRight, ClipboardList, Gavel, Rows3 } from "lucide-react";
 
 export default function AdminHomePage() {
   return (
@@ -7,16 +7,16 @@ export default function AdminHomePage() {
       <section className="mx-auto flex max-w-7xl flex-col gap-8 rounded-[8px] border border-graphite/15 bg-chalk/90 p-6 shadow-panel backdrop-blur sm:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.22em] text-brass">SwingScore live alpha</p>
+            <p className="font-mono text-xs uppercase tracking-[0.22em] text-brass">SwingScore admin</p>
             <h1 className="mt-3 max-w-3xl font-display text-4xl font-black leading-tight text-ink sm:text-6xl">
-              Run the contest from raw scores to awards.
+              Manage contests, rounds, judges, and results.
             </h1>
           </div>
           <Link
-            href="/admin/competitions/demo-novice-jj"
+            href="/admin/competitions"
             className="inline-flex items-center justify-center gap-2 rounded-[6px] bg-graphite px-5 py-3 text-sm font-bold text-paper transition hover:bg-ink"
           >
-            Open demo event
+            Open Contest Manager
             <ArrowRight size={18} />
           </Link>
         </div>
@@ -25,18 +25,18 @@ export default function AdminHomePage() {
           {[
             {
               icon: ClipboardList,
-              title: "Setup",
-              body: "Import competitors, assign judges, configure callbacks, and create heat sheets."
+              title: "Contests",
+              body: "Create division-level contest containers and keep old records archived."
             },
             {
-              icon: RadioTower,
-              title: "Live judging",
-              body: "Mobile-first judge links autosave raw scores and restore drafts after refresh."
+              icon: Rows3,
+              title: "Rounds",
+              body: "Run Callback Rounds for prelims and semis, then generate Final Rounds."
             },
             {
-              icon: ShieldCheck,
-              title: "Chief Judge",
-              body: "Review every sheet, use CJ raw scores for ties, and finalize immutable results."
+              icon: Gavel,
+              title: "Judges",
+              body: "Assign judging sheets per round and protect scoring once a round starts."
             }
           ].map((item) => (
             <article key={item.title} className="rounded-[8px] border border-graphite/15 bg-paper p-5">

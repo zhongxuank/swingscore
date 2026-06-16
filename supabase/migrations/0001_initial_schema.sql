@@ -1,7 +1,10 @@
 create extension if not exists "pgcrypto";
 
-create type competition_kind as enum ('prelims', 'finals');
+create type competition_kind as enum ('contest');
 create type competition_status as enum ('draft', 'running', 'finalized');
+create type round_stage as enum ('prelim', 'quarter_final', 'semi_final', 'final');
+create type scoring_method as enum ('callback', 'relative_placement');
+create type round_status as enum ('draft', 'running', 'finalized');
 create type dancer_role as enum ('Leader', 'Follower');
 create type judge_assignment_role as enum ('leaders', 'followers', 'both');
 create type chief_judge_mode as enum ('none', 'tiebreak_only', 'full_panel');
@@ -16,19 +19,31 @@ create table competitions (
   status competition_status not null default 'draft',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  finalized_at timestamptz
+  finalized_at timestamptz,
+  archived_at timestamptz
 );
 
 create table competition_rounds (
   id uuid primary key default gen_random_uuid(),
   competition_id uuid not null references competitions(id) on delete cascade,
   name text not null,
+  stage round_stage not null default 'prelim',
+  scoring_method scoring_method not null default 'callback',
+  status round_status not null default 'draft',
+  round_order integer not null default 1 check (round_order > 0),
+  source_round_id uuid references competition_rounds(id) on delete set null,
   required_yeses integer not null default 12 check (required_yeses >= 0),
   required_alts integer not null default 3 check (required_alts between 0 and 3),
   advancement_count integer not null default 24 check (advancement_count >= 0),
   leader_chief_judge_mode chief_judge_mode not null default 'tiebreak_only',
   follower_chief_judge_mode chief_judge_mode not null default 'tiebreak_only',
-  alt_profile jsonb not null default '{"yes":10,"alt1":4.5,"alt2":4.3,"alt3":4.2,"no":0}'::jsonb
+  chief_judge_counts_for_final boolean not null default false,
+  alt_profile jsonb not null default '{"yes":10,"alt1":4.5,"alt2":4.3,"alt3":4.2,"no":0}'::jsonb,
+  started_at timestamptz,
+  setup_locked_at timestamptz,
+  finalized_at timestamptz,
+  setup_snapshot jsonb not null default '{}'::jsonb,
+  unique (competition_id, round_order)
 );
 
 create table competitors (
@@ -73,9 +88,10 @@ create table couples (
   id uuid primary key default gen_random_uuid(),
   competition_id uuid not null references competitions(id) on delete cascade,
   leader_id uuid not null references competitors(id) on delete cascade,
-  follower_id uuid not null references competitors(id) on delete cascade,
+  follower_id uuid references competitors(id) on delete set null,
   dance_order integer not null,
-  unique (competition_id, leader_id, follower_id)
+  unique (competition_id, leader_id),
+  unique (competition_id, follower_id)
 );
 
 create table pairings (
@@ -141,6 +157,7 @@ create table emcee_announcements (
 create table access_links (
   id uuid primary key default gen_random_uuid(),
   competition_id uuid not null references competitions(id) on delete cascade,
+  round_id uuid references competition_rounds(id) on delete cascade,
   judge_id uuid references judges(id) on delete cascade,
   role access_role not null,
   token_hash text not null unique,
@@ -202,7 +219,47 @@ create policy "owners manage judges" on judges
   for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
   with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
 
+create policy "owners manage judge assignments" on judge_assignments
+  for all using (
+    exists (
+      select 1
+      from competition_rounds r
+      join competitions c on c.id = r.competition_id
+      where r.id = round_id and c.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from competition_rounds r
+      join competitions c on c.id = r.competition_id
+      where r.id = round_id and c.owner_id = auth.uid()
+    )
+  );
+
+create policy "owners manage heats" on heats
+  for all using (
+    exists (
+      select 1
+      from competition_rounds r
+      join competitions c on c.id = r.competition_id
+      where r.id = round_id and c.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from competition_rounds r
+      join competitions c on c.id = r.competition_id
+      where r.id = round_id and c.owner_id = auth.uid()
+    )
+  );
+
 create policy "owners manage couples" on couples
+  for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
+  with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
+
+create policy "owners manage pairings" on pairings
   for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
   with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
 
@@ -210,9 +267,46 @@ create policy "owners manage scores" on score_entries
   for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
   with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
 
+create policy "owners manage submissions" on judge_submissions
+  for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
+  with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
+
+create policy "owners manage advancement results" on advancement_results
+  for all using (
+    exists (
+      select 1
+      from competition_rounds r
+      join competitions c on c.id = r.competition_id
+      where r.id = round_id and c.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from competition_rounds r
+      join competitions c on c.id = r.competition_id
+      where r.id = round_id and c.owner_id = auth.uid()
+    )
+  );
+
+create policy "owners manage final placements" on final_placements
+  for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
+  with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
+
+create policy "owners manage emcee announcements" on emcee_announcements
+  for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
+  with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
+
+create policy "owners manage access links" on access_links
+  for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
+  with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
+
 create policy "owners manage exports" on result_exports
   for all using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()))
   with check (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
+
+create policy "owners read audit events" on audit_events
+  for select using (exists (select 1 from competitions c where c.id = competition_id and c.owner_id = auth.uid()));
 
 create publication supabase_realtime for table
   score_entries,

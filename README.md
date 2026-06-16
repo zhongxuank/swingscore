@@ -1,6 +1,6 @@
 # SwingScore
 
-SwingScore is a live-alpha West Coast Swing competition scoring system. It is built as a Supabase-ready Next.js app with raw-score judging, prelim callback derivation, Chief Judge raw-score tie review, Relative Placement finals scoring, emcee views, and export previews.
+SwingScore is a West Coast Swing contest scoring system. The Beta setup model treats a contest as the division-level container and runs Prelim, Semi-Final, and Final stages as separate rounds with their own judges, setup locks, scoring rules, and result snapshots.
 
 ## Quick Start
 
@@ -12,6 +12,7 @@ npm run dev
 Open:
 
 - Admin: `http://localhost:3000/admin`
+- Contest Manager: `http://localhost:3000/admin/competitions`
 - Judge demo: `http://localhost:3000/judge/demo-judge`
 - Chief Judge demo: `http://localhost:3000/chief/demo-chief`
 - Emcee demo: `http://localhost:3000/emcee/demo-emcee`
@@ -19,7 +20,7 @@ Open:
 
 ## Supabase
 
-The app is Supabase-ready but does not require production credentials for the demo workspace.
+The schema and environment placeholders are included, but production Supabase credentials are not required for the demo workspace.
 
 1. Create a Supabase project.
 2. Apply `supabase/migrations/0001_initial_schema.sql`.
@@ -30,10 +31,10 @@ The app is Supabase-ready but does not require production credentials for the de
 
 - Scores are stored as `score_x2` integer half-points. `0` means unscored.
 - Judges and Chief Judge always enter raw scores.
-- Prelim callbacks are derived from rankings and the default WSDC callback profile: Yes `10`, Alt 1 `4.5`, Alt 2 `4.3`, Alt 3 `4.2`, No `0`.
+- Callback Rounds are role-based and derive callbacks from rankings and the default WSDC callback profile: Yes `10`, Alt 1 `4.5`, Alt 2 `4.3`, Alt 3 `4.2`, No `0`.
 - Chief Judge modes are `none`, `tiebreak_only`, and `full_panel`.
 - In `tiebreak_only`, Chief Judge raw scores are excluded from original aggregation and used only after original calculations identify a meaningful boundary tie.
-- Finals convert raw scores to ordinals and use Relative Placement majority rules.
+- Final Rounds score couples, convert raw scores to ordinals, and use Relative Placement majority rules.
 - The UI does not claim WSDC approval or certification.
 
 ## Verification

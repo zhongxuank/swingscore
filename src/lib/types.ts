@@ -1,6 +1,12 @@
 export type Role = "Leader" | "Follower";
 
-export type CompetitionKind = "prelims" | "finals";
+export type CompetitionKind = "contest";
+
+export type RoundStage = "prelim" | "quarter_final" | "semi_final" | "final";
+
+export type ScoringMethod = "callback" | "relative_placement";
+
+export type RoundStatus = "draft" | "running" | "finalized";
 
 export type AccessRole = "admin" | "judge" | "chief" | "emcee";
 
@@ -17,17 +23,33 @@ export interface Competition {
   kind: CompetitionKind;
   status: "draft" | "running" | "finalized";
   createdAt: string;
+  updatedAt?: string;
+  archivedAt?: string;
+  sourceCompetitionId?: string;
 }
+
+export type Contest = Competition;
 
 export interface RoundConfig {
   id: string;
   competitionId: string;
   name: string;
+  stage: RoundStage;
+  scoringMethod: ScoringMethod;
+  status: RoundStatus;
+  order: number;
   requiredYeses: number;
   requiredAlts: number;
   advancementCount: number;
   leaderChiefJudgeMode: ChiefJudgeMode;
   followerChiefJudgeMode: ChiefJudgeMode;
+  chiefJudgeCountsForFinal?: boolean;
+  sourceRoundId?: string;
+  startedAt?: string;
+  setupLockedAt?: string;
+  finalizedAt?: string;
+  judgePanelConfirmedAt?: string;
+  setupSnapshot?: Record<string, unknown>;
 }
 
 export interface Competitor {
@@ -49,6 +71,7 @@ export interface Judge {
 
 export interface HeatEntry {
   id: string;
+  roundId: string;
   heatNumber: number;
   competitorId: string;
   role: Role;
@@ -67,7 +90,7 @@ export interface RawScore {
 export interface Couple {
   id: string;
   leaderId: string;
-  followerId: string;
+  followerId?: string;
   danceOrder: number;
 }
 

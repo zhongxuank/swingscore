@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FileDown, ShieldAlert } from "lucide-react";
 import {
+  demoCompetition,
   demoChiefScores,
   demoCompetitors,
   demoDefaultJudgeAssignments,
@@ -13,12 +14,17 @@ import {
   isJudgeAssignmentRole,
   roleAssignmentAllows
 } from "@/lib/data/demo-data";
-import type { JudgeAssignmentRole, RawScore, Role } from "@/lib/types";
+import { parseRoundAccessToken } from "@/lib/access-links";
+import { readLocalContests, readLocalRounds } from "@/lib/data/local-contest-store";
+import type { JudgeAssignmentRole, RawScore, Role, RoundConfig } from "@/lib/types";
+import { chiefJudgeCountsForRound } from "@/lib/rounds";
 import { advancementCsv, rawScoresCsv } from "@/lib/scoring/exports";
 import { calculatePrelimAdvancement } from "@/lib/scoring/prelims";
 import { AppFrame, NavButton, Panel, ScoreSwipeRow, competitorLabel, updateScore } from "@/components/workspaces/shared";
 
 export function ChiefWorkspace({ token }: { token: string }) {
+  const parsedAccess = useMemo(() => parseRoundAccessToken(token), [token]);
+  const [accessContext, setAccessContext] = useState<{ contestName: string; roundName: string; adminHref: string; round: RoundConfig } | null>(null);
   const [chiefScores, setChiefScores] = useState<RawScore[]>(demoChiefScores);
   const [finalized, setFinalized] = useState(false);
   const [judgeAssignments, setJudgeAssignments] = useState<Record<string, JudgeAssignmentRole>>({ ...demoDefaultJudgeAssignments });
@@ -41,8 +47,26 @@ export function ChiefWorkspace({ token }: { token: string }) {
     }
   }, []);
 
-  const leaders = useMemo(() => calculateRole("Leader", chiefScores, judgeAssignments), [chiefScores, judgeAssignments]);
-  const followers = useMemo(() => calculateRole("Follower", chiefScores, judgeAssignments), [chiefScores, judgeAssignments]);
+  useEffect(() => {
+    if (!parsedAccess) {
+      setAccessContext(null);
+      return;
+    }
+
+    const contest = readLocalContests().find((item) => item.id === parsedAccess.competitionId);
+    const round = readLocalRounds().find((item) => item.id === parsedAccess.roundId) ?? demoRound;
+    setAccessContext({
+      contestName: contest?.name ?? parsedAccess.competitionId,
+      roundName: round?.name ?? parsedAccess.roundId,
+      adminHref: `/admin/competitions/${parsedAccess.competitionId}`,
+      round
+    });
+  }, [parsedAccess]);
+
+  const activeRound = accessContext?.round ?? demoRound;
+  const chiefScoresCount = chiefJudgeCountsForRound(activeRound);
+  const leaders = useMemo(() => calculateRole("Leader", chiefScores, judgeAssignments, activeRound), [chiefScores, judgeAssignments, activeRound]);
+  const followers = useMemo(() => calculateRole("Follower", chiefScores, judgeAssignments, activeRound), [chiefScores, judgeAssignments, activeRound]);
   const allTies = [...leaders.ties, ...followers.ties];
   const allRows = [...leaders.rows, ...followers.rows];
 
@@ -54,11 +78,15 @@ export function ChiefWorkspace({ token }: { token: string }) {
   return (
     <AppFrame
       eyebrow={`Chief Judge / ${token}`}
-      title="Raw score review"
-      subtitle="Chief Judge scores are captured as raw scores. In tiebreak-only mode they are excluded from original aggregation and applied only after a boundary tie is found."
+      title="Callback raw score review"
+      subtitle={`${accessContext ? `${accessContext.contestName} / ${accessContext.roundName}. ` : `${demoCompetition.name} / ${demoRound.name}. `}Chief Judge scores are captured as raw scores. ${
+        chiefScoresCount
+          ? "This round includes the Chief Judge as a normal scoring sheet."
+          : "In tiebreak-only mode they are excluded from original aggregation and applied only after a boundary tie is found."
+      }`}
       actions={
         <>
-          <NavButton href="/admin/competitions/demo-novice-jj">Admin</NavButton>
+          <NavButton href={accessContext?.adminHref ?? "/admin/competitions/demo-novice-jj"}>Admin</NavButton>
           <NavButton href="/export/demo-novice-jj" tone="dark">
             <FileDown size={16} className="mr-2" /> Exports
           </NavButton>
@@ -171,14 +199,14 @@ export function ChiefWorkspace({ token }: { token: string }) {
   );
 }
 
-function calculateRole(role: Role, chiefScores: RawScore[], judgeAssignments: Record<string, JudgeAssignmentRole>) {
+function calculateRole(role: Role, chiefScores: RawScore[], judgeAssignments: Record<string, JudgeAssignmentRole>, round: RoundConfig) {
   return calculatePrelimAdvancement({
     competitors: demoCompetitors.filter((competitor) => competitor.role === role),
     panelScores: demoPrelimScores.filter((score) => score.role === role && roleAssignmentAllows(judgeAssignments[score.judgeId] ?? "both", role)),
     chiefScores: chiefScores.filter((score) => score.role === role),
-    requiredYeses: demoRound.requiredYeses,
-    requiredAlts: demoRound.requiredAlts,
-    advancementCount: demoRound.advancementCount,
-    chiefJudgeMode: "tiebreak_only"
+    requiredYeses: round.requiredYeses,
+    requiredAlts: round.requiredAlts,
+    advancementCount: round.advancementCount,
+    chiefJudgeMode: role === "Leader" ? round.leaderChiefJudgeMode : round.followerChiefJudgeMode
   });
 }

@@ -60,7 +60,7 @@ export function ExportWorkspace({ competitionId }: { competitionId: string }) {
     <AppFrame
       eyebrow={`Exports / ${competitionId}`}
       title="Results package"
-      subtitle="CSV and print-ready outputs for scorekeepers, Chief Judge review, emcee announcements, and event records."
+      subtitle="CSV and print-ready outputs for scorekeepers, Chief Judge review, emcee announcements, and contest records."
       actions={
         <>
           <NavButton href="/admin/competitions/demo-novice-jj">Admin</NavButton>

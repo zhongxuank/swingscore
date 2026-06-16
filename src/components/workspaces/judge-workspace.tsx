@@ -15,6 +15,8 @@ import {
   roleAssignmentAllows,
   roleAssignmentLabel
 } from "@/lib/data/demo-data";
+import { parseRoundAccessToken } from "@/lib/access-links";
+import { readLocalContests, readLocalRounds } from "@/lib/data/local-contest-store";
 import type { BoundaryTie, JudgeAssignmentRole, RawScore, Role, SaveState } from "@/lib/types";
 import { deriveJudgePrelimMarks } from "@/lib/scoring/prelims";
 import { formatScore, validateScoreSheet } from "@/lib/scoring/score-utils";
@@ -41,13 +43,28 @@ const judgeViews: Array<{ id: JudgeView; label: string; icon: React.ComponentTyp
 const tieTones: TieHighlightTone[] = ["rose", "sky", "violet", "teal"];
 
 export function JudgeWorkspace({ token }: { token: string }) {
-  const accessLink = useMemo(() => demoJudgeAccessLinks.find((link) => link.token === token) ?? demoJudgeAccessLinks[0], [token]);
+  const parsedAccess = useMemo(() => parseRoundAccessToken(token), [token]);
+  const accessLink = useMemo(() => {
+    const demoLink = demoJudgeAccessLinks.find((link) => link.token === token);
+    if (demoLink) return demoLink;
+    if (parsedAccess?.role === "judge") {
+      return {
+        token,
+        href: `/judge/${token}`,
+        label: "Judge sheet",
+        judgeId: parsedAccess.subjectId,
+        roleAssignment: parsedAccess.roleAssignment ?? "both"
+      };
+    }
+    return demoJudgeAccessLinks[0];
+  }, [parsedAccess, token]);
+  const [accessContext, setAccessContext] = useState<{ contestName: string; roundName: string; scoringLabel: string } | null>(null);
   const [judgeAssignments, setJudgeAssignments] = useState<Record<string, JudgeAssignmentRole>>({ ...demoDefaultJudgeAssignments });
   const [scores, setScores] = useState<RawScore[]>(() => seedScoresForJudge(accessLink.judgeId));
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [activeView, setActiveView] = useState<JudgeView>("heat");
   const [submittedRoles, setSubmittedRoles] = useState<Record<Role, boolean>>({ Leader: false, Follower: false });
-  const accessAssignment = judgeAssignments[accessLink.judgeId] ?? accessLink.roleAssignment;
+  const accessAssignment = parsedAccess?.role === "judge" && parsedAccess.roleAssignment ? parsedAccess.roleAssignment : judgeAssignments[accessLink.judgeId] ?? accessLink.roleAssignment;
   const allowedRoles = useMemo<Role[]>(
     () => (["Leader", "Follower"] as Role[]).filter((role) => roleAssignmentAllows(accessAssignment, role)),
     [accessAssignment]
@@ -73,6 +90,21 @@ export function JudgeWorkspace({ token }: { token: string }) {
       window.localStorage.removeItem(demoJudgeAssignmentStorageKey);
     }
   }, []);
+
+  useEffect(() => {
+    if (!parsedAccess) {
+      setAccessContext(null);
+      return;
+    }
+
+    const contest = readLocalContests().find((item) => item.id === parsedAccess.competitionId);
+    const round = readLocalRounds().find((item) => item.id === parsedAccess.roundId);
+    setAccessContext({
+      contestName: contest?.name ?? parsedAccess.competitionId,
+      roundName: round?.name ?? parsedAccess.roundId,
+      scoringLabel: round?.scoringMethod === "relative_placement" ? "Final Round" : "Callback Round"
+    });
+  }, [parsedAccess]);
 
   useEffect(() => {
     setScores(seedScoresForJudge(accessLink.judgeId));
@@ -148,8 +180,8 @@ export function JudgeWorkspace({ token }: { token: string }) {
   return (
     <AppFrame
       eyebrow={`Judge link / ${token}`}
-      title={demoCompetition.division}
-      subtitle={`Assigned sheet: ${roleAssignmentLabel(accessAssignment)}. Enter raw scores only; callbacks and alternates are calculated per role.`}
+      title={accessContext?.contestName ?? demoCompetition.name}
+      subtitle={`${accessContext?.roundName ?? demoRound.name} ${accessContext?.scoringLabel ?? "Callback Round"}. Assigned sheet: ${roleAssignmentLabel(accessAssignment)}. Enter raw scores only; callbacks and alternates are calculated per role.`}
       actions={<StatusPill state={saveState} />}
     >
       <div className="mx-auto max-w-3xl">

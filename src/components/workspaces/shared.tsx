@@ -49,15 +49,18 @@ export function AppFrame({
 export function NavButton({
   href,
   children,
-  tone = "light"
+  tone = "light",
+  testId
 }: {
   href: string;
   children: React.ReactNode;
   tone?: "light" | "dark";
+  testId?: string;
 }) {
   return (
     <Link
       href={href}
+      data-testid={testId}
       className={clsx(
         "inline-flex items-center justify-center rounded-[6px] px-4 py-2 text-sm font-bold transition",
         tone === "dark" ? "bg-graphite text-paper hover:bg-ink" : "border border-graphite/15 bg-paper hover:bg-bluepaper"

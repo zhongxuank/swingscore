@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Mic2, MonitorUp } from "lucide-react";
 import {
+  demoCompetition,
   demoChiefScores,
   demoCompetitors,
   demoCouples,
@@ -12,6 +13,8 @@ import {
   demoPrelimScores,
   demoRound
 } from "@/lib/data/demo-data";
+import { parseRoundAccessToken } from "@/lib/access-links";
+import { readLocalContests, readLocalRounds } from "@/lib/data/local-contest-store";
 import { calculatePrelimAdvancement } from "@/lib/scoring/prelims";
 import { calculateRelativePlacements, convertRawScoresToOrdinals } from "@/lib/scoring/relative-placement";
 import { AppFrame, HeatSheetGrid, NavButton, Panel, competitorLabel, coupleLabel } from "@/components/workspaces/shared";
@@ -19,6 +22,8 @@ import { AppFrame, HeatSheetGrid, NavButton, Panel, competitorLabel, coupleLabel
 type EmceeView = "callbacks" | "alternates" | "finals" | "heats";
 
 export function EmceeWorkspace({ token }: { token: string }) {
+  const parsedAccess = useMemo(() => parseRoundAccessToken(token), [token]);
+  const [accessContext, setAccessContext] = useState<{ contestName: string; roundName: string; adminHref: string } | null>(null);
   const [view, setView] = useState<EmceeView>("callbacks");
   const advancement = useMemo(() => {
     const byRole = (role: "Leader" | "Follower") =>
@@ -33,6 +38,21 @@ export function EmceeWorkspace({ token }: { token: string }) {
       }).rows;
     return [...byRole("Leader"), ...byRole("Follower")];
   }, []);
+
+  useEffect(() => {
+    if (!parsedAccess) {
+      setAccessContext(null);
+      return;
+    }
+
+    const contest = readLocalContests().find((item) => item.id === parsedAccess.competitionId);
+    const round = readLocalRounds().find((item) => item.id === parsedAccess.roundId);
+    setAccessContext({
+      contestName: contest?.name ?? parsedAccess.competitionId,
+      roundName: round?.name ?? parsedAccess.roundId,
+      adminHref: `/admin/competitions/${parsedAccess.competitionId}`
+    });
+  }, [parsedAccess]);
   const placements = useMemo(() => {
     const sheets = demoJudges
       .filter((judge) => !judge.isChiefJudge)
@@ -46,9 +66,9 @@ export function EmceeWorkspace({ token }: { token: string }) {
   return (
     <AppFrame
       eyebrow={`Emcee / ${token}`}
-      title="Announcements"
-      subtitle="Read-only views for callbacks, alternates, finals announcements, pairings, and heat instructions."
-      actions={<NavButton href="/admin/competitions/demo-novice-jj">Admin</NavButton>}
+      title="Contest announcements"
+      subtitle={`${accessContext ? `${accessContext.contestName} / ${accessContext.roundName}. ` : `${demoCompetition.name} / ${demoRound.name}. `}Read-only callback, heat, pairing, and placement views for the current contest.`}
+      actions={<NavButton href={accessContext?.adminHref ?? "/admin/competitions/demo-novice-jj"}>Admin</NavButton>}
     >
       <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
         <Panel>

@@ -1,24 +1,76 @@
 import type { Competition, Competitor, Couple, HeatEntry, Judge, JudgeAssignmentRole, RawScore, Role, RoundConfig } from "@/lib/types";
+import { generateHeatEntries } from "@/lib/rounds";
 
 export const demoCompetition: Competition = {
   id: "demo-novice-jj",
-  name: "SwingScore Live Alpha",
-  division: "Novice Jack and Jill",
-  kind: "prelims",
+  name: "Novice Jack and Jill",
+  division: "Novice",
+  kind: "contest",
   status: "running",
-  createdAt: "2026-06-15T00:00:00.000Z"
+  createdAt: "2026-06-15T00:00:00.000Z",
+  updatedAt: "2026-06-16T08:30:00.000Z"
 };
+
+export const demoCompetitions: Competition[] = [
+  demoCompetition,
+  {
+    id: "demo-intermediate-jj",
+    name: "Intermediate Jack and Jill",
+    division: "Intermediate",
+    kind: "contest",
+    status: "draft",
+    createdAt: "2026-06-16T02:00:00.000Z",
+    updatedAt: "2026-06-16T02:20:00.000Z"
+  },
+  {
+    id: "demo-archived-masters",
+    name: "Masters Jack and Jill",
+    division: "Masters",
+    kind: "contest",
+    status: "finalized",
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T12:30:00.000Z",
+    archivedAt: "2026-05-02T10:00:00.000Z"
+  }
+];
 
 export const demoRound: RoundConfig = {
   id: "round-prelims",
   competitionId: demoCompetition.id,
   name: "Prelims",
+  stage: "prelim",
+  scoringMethod: "callback",
+  status: "running",
+  order: 1,
   requiredYeses: 4,
   requiredAlts: 3,
   advancementCount: 6,
   leaderChiefJudgeMode: "tiebreak_only",
-  followerChiefJudgeMode: "tiebreak_only"
+  followerChiefJudgeMode: "tiebreak_only",
+  startedAt: "2026-06-16T08:30:00.000Z",
+  setupLockedAt: "2026-06-16T08:30:00.000Z",
+  judgePanelConfirmedAt: "2026-06-16T08:20:00.000Z"
 };
+
+export const demoFinalRound: RoundConfig = {
+  id: "round-finals",
+  competitionId: demoCompetition.id,
+  name: "Finals",
+  stage: "final",
+  scoringMethod: "relative_placement",
+  status: "draft",
+  order: 2,
+  requiredYeses: 0,
+  requiredAlts: 0,
+  advancementCount: 0,
+  leaderChiefJudgeMode: "none",
+  followerChiefJudgeMode: "none",
+  chiefJudgeCountsForFinal: false,
+  sourceRoundId: demoRound.id,
+  judgePanelConfirmedAt: "2026-06-16T08:20:00.000Z"
+};
+
+export const demoRounds: RoundConfig[] = [demoRound, demoFinalRound];
 
 export const demoCompetitors: Competitor[] = [
   { id: "L101", bibNumber: "101", preferredName: "Alex", role: "Leader" },
@@ -97,15 +149,11 @@ export function roleAssignmentLabel(assignment: JudgeAssignmentRole) {
   return "Leaders and Followers";
 }
 
-export const demoHeatEntries: HeatEntry[] = [
-  ...demoCompetitors.map((competitor, index) => ({
-    id: `heat-${competitor.id}`,
-    heatNumber: Math.floor(index % 8) < 4 ? 1 : 2,
-    competitorId: competitor.id,
-    role: competitor.role,
-    isFiller: false
-  }))
-];
+export const demoHeatEntries: HeatEntry[] = generateHeatEntries({
+  competitors: demoCompetitors,
+  roundId: demoRound.id,
+  maxDancersPerHeat: 4
+});
 
 export const demoPrelimScores: RawScore[] = demoJudges
   .filter((judge) => !judge.isChiefJudge)
@@ -140,12 +188,12 @@ export const demoCouples: Couple[] = [
 ];
 
 export const demoFinalScores: RawScore[] = demoJudges
-  .filter((judge) => !judge.isChiefJudge)
   .flatMap((judge, judgeIndex) =>
     demoCouples.map((couple, coupleIndex) => ({
       judgeId: judge.id,
       subjectId: couple.id,
-      scoreX2: 196 - coupleIndex * 4 + ((judgeIndex + coupleIndex) % 3)
+      scoreX2: 196 - coupleIndex * 4 + ((judgeIndex + coupleIndex) % 3),
+      isChiefJudge: judge.isChiefJudge
     }))
   );
 

@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { ContestManager } from "@/components/workspaces/contest-manager";
 
 export default function CompetitionsPage() {
-  redirect("/admin/competitions/demo-novice-jj");
+  return <ContestManager />;
 }
