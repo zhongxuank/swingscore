@@ -310,7 +310,6 @@ export function ScoreSwipeRow({
         >
           <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-graphite/45">Score</p>
           <p className="font-display text-2xl font-black leading-none text-ink">{formatScore(scoreX2)}</p>
-          {tieHighlight ? <p className="mt-1 font-mono text-[10px] font-black uppercase text-graphite">{tieHighlight.label}</p> : null}
         </div>
       </div>
     </div>

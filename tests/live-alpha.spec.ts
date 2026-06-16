@@ -66,8 +66,8 @@ test("judge boundary ties highlight matching bib groups", async ({ page }) => {
   await expect(caseyScore).toHaveAttribute("data-score-tie-group", "Tie 1");
   await expect(taylorScore).toHaveAttribute("data-score-tie-group", "Tie 2");
   await expect(quinnScore).toHaveAttribute("data-score-tie-group", "Tie 2");
-  await expect(rileyScore).toContainText("Tie 1");
-  await expect(quinnScore).toContainText("Tie 2");
+  await expect(rileyScore).not.toContainText("Tie 1");
+  await expect(quinnScore).not.toContainText("Tie 2");
 });
 
 test("chief judge uses the same raw-score slider interface", async ({ page }) => {
