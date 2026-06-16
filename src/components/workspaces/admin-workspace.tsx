@@ -25,7 +25,7 @@ import { parseCompetitorCsv } from "@/lib/scoring/csv";
 import { advancementCsv, placementsCsv, rawScoresCsv } from "@/lib/scoring/exports";
 import { calculatePrelimAdvancement } from "@/lib/scoring/prelims";
 import { convertRawScoresToOrdinals, calculateRelativePlacements } from "@/lib/scoring/relative-placement";
-import { AppFrame, NavButton, Panel, competitorLabel, coupleLabel } from "@/components/workspaces/shared";
+import { AppFrame, HeatSheetGrid, NavButton, Panel, competitorLabel, coupleLabel } from "@/components/workspaces/shared";
 
 type AdminTab = "setup" | "import" | "judges" | "heats" | "results" | "finals" | "exports";
 
@@ -252,23 +252,7 @@ export function AdminWorkspace({ competitionId }: { competitionId: string }) {
 
       {activeTab === "heats" ? (
         <Panel title="Heat sheet">
-          <div className="grid gap-4 md:grid-cols-2">
-            {[1, 2].map((heat) => (
-              <div key={heat} className="rounded-[8px] border border-graphite/15 bg-paper p-4">
-                <h3 className="mb-3 text-lg font-black">Heat {heat}</h3>
-                <div className="grid gap-2">
-                  {demoHeatEntries
-                    .filter((entry) => entry.heatNumber === heat)
-                    .map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between rounded-[6px] bg-chalk px-3 py-2">
-                        <span>{competitorLabel(competitors.find((competitor) => competitor.id === entry.competitorId))}</span>
-                        {entry.isFiller ? <span className="text-xs font-black text-oxblood">FILLER - DO NOT SCORE</span> : null}
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <HeatSheetGrid competitors={competitors} heatEntries={demoHeatEntries} />
         </Panel>
       ) : null}
 

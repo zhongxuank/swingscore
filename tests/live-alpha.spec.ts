@@ -9,6 +9,24 @@ test("admin demo exposes live-alpha workflow", async ({ page }) => {
   await expect(page.getByText("Follower advancement")).toBeVisible();
 });
 
+test("admin heat sheet splits leaders and followers into columns", async ({ page }) => {
+  await page.goto("/admin/competitions/demo-novice-jj");
+  await page.getByRole("button", { name: "Heats" }).click();
+  await expect(page.getByTestId("heat-1-leader")).toContainText("101");
+  await expect(page.getByTestId("heat-1-leader")).not.toContainText("201");
+  await expect(page.getByTestId("heat-1-follower")).toContainText("201");
+  await expect(page.getByTestId("heat-1-follower")).not.toContainText("101");
+});
+
+test("emcee heat sheet splits leaders and followers into columns", async ({ page }) => {
+  await page.goto("/emcee/demo-emcee");
+  await page.getByRole("button", { name: "Heats" }).click();
+  await expect(page.getByTestId("heat-1-leader")).toContainText("101");
+  await expect(page.getByTestId("heat-1-leader")).not.toContainText("201");
+  await expect(page.getByTestId("heat-1-follower")).toContainText("201");
+  await expect(page.getByTestId("heat-1-follower")).not.toContainText("101");
+});
+
 test("judge can score and submit demo sheet", async ({ page }) => {
   await page.goto("/judge/demo-judge");
   await expect(page.getByRole("heading", { name: /novice jack and jill/i })).toBeVisible();
@@ -40,8 +58,7 @@ test("judge warnings stay in the bottom action area", async ({ page }) => {
   await page.goto("/judge/demo-judge");
   const alexScore = page.getByRole("slider", { name: "Score Alex" });
   await expect(alexScore).toHaveAttribute("data-score-status", "yes");
-  await alexScore.focus();
-  await alexScore.press("Home");
+  await alexScore.click({ position: { x: 1, y: 24 } });
   await expect(alexScore).toHaveAttribute("data-score-status", "unscored");
   await expect(page.getByTestId("judge-warning")).toContainText("L101 is unscored");
   await expect(page.getByTestId("judge-action-panel")).toContainText("Submit leaders scores");

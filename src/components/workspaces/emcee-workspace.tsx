@@ -14,7 +14,7 @@ import {
 } from "@/lib/data/demo-data";
 import { calculatePrelimAdvancement } from "@/lib/scoring/prelims";
 import { calculateRelativePlacements, convertRawScoresToOrdinals } from "@/lib/scoring/relative-placement";
-import { AppFrame, NavButton, Panel, competitorLabel, coupleLabel } from "@/components/workspaces/shared";
+import { AppFrame, HeatSheetGrid, NavButton, Panel, competitorLabel, coupleLabel } from "@/components/workspaces/shared";
 
 type EmceeView = "callbacks" | "alternates" | "finals" | "heats";
 
@@ -117,23 +117,7 @@ export function EmceeWorkspace({ token }: { token: string }) {
           ) : null}
 
           {view === "heats" ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {[1, 2].map((heat) => (
-                <div key={heat} className="rounded-[8px] bg-paper p-4">
-                  <h3 className="mb-3 text-2xl font-black">Heat {heat}</h3>
-                  <div className="grid gap-2">
-                    {demoHeatEntries
-                      .filter((entry) => entry.heatNumber === heat)
-                      .map((entry) => (
-                        <div key={entry.id} className="rounded-[6px] bg-chalk px-3 py-2 font-bold">
-                          {competitorLabel(demoCompetitors.find((competitor) => competitor.id === entry.competitorId))}
-                          {entry.isFiller ? <span className="ml-2 text-oxblood">FILLER - DO NOT SCORE</span> : null}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <HeatSheetGrid competitors={demoCompetitors} heatEntries={demoHeatEntries} />
           ) : null}
         </Panel>
       </div>

@@ -4,8 +4,8 @@ import { useRef } from "react";
 import clsx from "clsx";
 import Link from "next/link";
 import { CheckCircle2, Loader2, Signal, SignalZero } from "lucide-react";
-import type { Competitor, Couple, RawScore, SaveState } from "@/lib/types";
-import { formatScore } from "@/lib/scoring/score-utils";
+import type { Competitor, Couple, HeatEntry, RawScore, Role, SaveState } from "@/lib/types";
+import { formatScore, MIN_SCORE_X2 } from "@/lib/scoring/score-utils";
 
 export type TieHighlightTone = "rose" | "sky" | "violet" | "teal";
 
@@ -111,6 +111,52 @@ export function StatusPill({ state }: { state: SaveState }) {
   );
 }
 
+export function HeatSheetGrid({
+  competitors,
+  heatEntries,
+  className
+}: {
+  competitors: Competitor[];
+  heatEntries: HeatEntry[];
+  className?: string;
+}) {
+  const heatNumbers = Array.from(new Set(heatEntries.map((entry) => entry.heatNumber))).sort((a, b) => a - b);
+
+  return (
+    <div className={clsx("grid gap-4 md:grid-cols-2", className)}>
+      {heatNumbers.map((heatNumber) => (
+        <article key={heatNumber} className="rounded-[8px] border border-graphite/15 bg-paper p-4" data-testid={`heat-card-${heatNumber}`}>
+          <h3 className="mb-3 text-lg font-black">Heat {heatNumber}</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {(["Leader", "Follower"] as Role[]).map((role) => {
+              const roleEntries = heatEntries.filter((entry) => entry.heatNumber === heatNumber && entry.role === role);
+              return (
+                <section key={role} className="min-w-0" data-testid={`heat-${heatNumber}-${role.toLowerCase()}`}>
+                  <h4 className="mb-2 rounded-[6px] bg-bluepaper px-2 py-1 text-center font-mono text-xs font-black uppercase tracking-[0.12em] text-graphite">
+                    {role}s
+                  </h4>
+                  <div className="grid gap-2">
+                    {roleEntries.map((entry) => {
+                      const competitor = competitors.find((item) => item.id === entry.competitorId);
+                      return (
+                        <div key={entry.id} className="min-w-0 rounded-[6px] bg-chalk px-3 py-2">
+                          <p className="font-display text-2xl font-black leading-none text-graphite">{competitor?.bibNumber ?? "?"}</p>
+                          <p className="mt-1 truncate text-sm font-bold text-graphite/70">{competitor?.preferredName ?? "Unknown"}</p>
+                          {entry.isFiller ? <p className="mt-1 text-xs font-black uppercase text-oxblood">Filler - do not score</p> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 export function ScoreInput({
   score,
   onChange,
@@ -175,7 +221,7 @@ export function ScoreSwipeRow({
     const rect = rowRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0) return scoreX2;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return Math.round(ratio * 200);
+    return normalizeScoreX2(Math.round(ratio * 200));
   }
 
   function beginGesture(event: React.PointerEvent<HTMLDivElement>) {
@@ -245,11 +291,11 @@ export function ScoreSwipeRow({
     const largeStep = event.shiftKey ? 10 : 1;
     if (event.key === "ArrowRight" || event.key === "ArrowUp") {
       event.preventDefault();
-      onChange(Math.min(200, scoreX2 + largeStep));
+      onChange(scoreX2 === 0 ? MIN_SCORE_X2 : Math.min(200, scoreX2 + largeStep));
     }
     if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
       event.preventDefault();
-      onChange(Math.max(0, scoreX2 - largeStep));
+      onChange(normalizeScoreX2(scoreX2 - largeStep));
     }
     if (event.key === "Home") {
       event.preventDefault();
@@ -328,6 +374,10 @@ function tieScoreClass(tone: TieHighlightTone) {
   if (tone === "violet") return "bg-violet-100 ring-2 ring-violet-500/65";
   if (tone === "teal") return "bg-teal-100 ring-2 ring-teal-500/65";
   return "bg-oxblood/15 ring-2 ring-oxblood/60";
+}
+
+function normalizeScoreX2(scoreX2: number) {
+  return scoreX2 < MIN_SCORE_X2 ? 0 : scoreX2;
 }
 
 function scoreFillClass(statusTone: "neutral" | "yes" | "alt" | "no") {
