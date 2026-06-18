@@ -2,6 +2,8 @@
 
 SwingScore is a West Coast Swing contest scoring system. The Beta setup model treats a contest as the division-level container and runs Prelim, Semi-Final, and Final stages as separate rounds with their own judges, setup locks, scoring rules, and result snapshots.
 
+For the current implementation status, handoff notes, limitations, and Beta roadmap, see [`docs/BETA_HANDOFF.md`](docs/BETA_HANDOFF.md).
+
 ## Quick Start
 
 ```bash
