@@ -9,3 +9,4 @@
 - Chief judge raw scores never tie. They break ties in prelims and are not a Relative Placement tiebreaker.
 - Never commit keys. The service role key stays out of the repo and out of client code.
 - Before finishing: `npm run lint`, `npm run typecheck`, `npm test`.
+- Live checks against the real Supabase project: `npm run test:live` (needs all three keys; in cloud sessions also set `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium`). It never sends email.

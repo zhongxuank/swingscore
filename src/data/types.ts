@@ -31,3 +31,43 @@ export interface Round {
 export type RoundSettings = Partial<
   Pick<Round, "yesCount" | "altCount" | "maxPerHeat" | "chiefJudgeCounts">
 >;
+
+export type DancerRole = "leader" | "follower";
+
+/** Someone signed up for a contest, identified by a bib that is unique within the contest. */
+export interface Competitor {
+  id: string;
+  contestId: string;
+  bib: string;
+  role: DancerRole;
+  /** Optional. Empty when not entered. */
+  name: string;
+}
+
+export type NewCompetitor = Pick<Competitor, "bib" | "role"> & { name?: string };
+
+export type JudgeAssignment = "leaders" | "followers" | "both";
+
+/** One person on a round's panel. The chief judge always judges both roles. */
+export interface RoundJudge {
+  id: string;
+  roundId: string;
+  name: string;
+  assignment: JudgeAssignment;
+  isChief: boolean;
+}
+
+export type NewRoundJudge = Pick<RoundJudge, "name" | "assignment"> & { isChief?: boolean };
+
+/** One dancer's place in a saved heat. */
+export interface SavedHeatSlot {
+  competitorId: string;
+  bib: string;
+  redancer: boolean;
+}
+
+export interface SavedHeat {
+  number: number;
+  leaders: SavedHeatSlot[];
+  followers: SavedHeatSlot[];
+}

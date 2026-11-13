@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildHeats } from "@/core/heats";
 import { StoreError, type ContestStore } from "./store";
 
 /** Every ContestStore must pass this. The in-memory store runs it now, the Supabase store runs it against a real database. */
@@ -82,6 +83,103 @@ export function runContestStoreContract(name: string, makeStore: () => Promise<C
       await expect(store.updateRoundSettings(prelim.id, { maxPerHeat: 0 })).rejects.toMatchObject({ code: "invalid" });
       await expect(store.updateRoundSettings(final.id, { yesCount: 5 })).rejects.toMatchObject({ code: "invalid" });
       await expect(store.updateRoundSettings(final.id, { chiefJudgeCounts: true })).resolves.toMatchObject({ chiefJudgeCounts: true });
+    });
+    it("adds competitors in bulk, lists them in bib order and edits them", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      await store.addCompetitors(contest.id, [
+        { bib: "10", role: "leader", name: " Ann " },
+        { bib: " 9 ", role: "leader" },
+        { bib: "200", role: "follower", name: "Bo" }
+      ]);
+      const listed = await store.listCompetitors(contest.id);
+      expect(listed.map((c) => [c.bib, c.role, c.name])).toEqual([
+        ["9", "leader", ""],
+        ["10", "leader", "Ann"],
+        ["200", "follower", "Bo"]
+      ]);
+
+      const updated = await store.updateCompetitor(listed[0].id, { bib: "11", name: "Cy" });
+      expect(updated).toMatchObject({ bib: "11", name: "Cy", role: "leader" });
+      await store.removeCompetitor(listed[1].id);
+      expect((await store.listCompetitors(contest.id)).map((c) => c.bib)).toEqual(["11", "200"]);
+    });
+
+    it("rejects duplicate or invalid bibs and adds nothing from a bad batch", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      await store.addCompetitors(contest.id, [{ bib: "1", role: "leader" }]);
+      await expect(store.addCompetitors(contest.id, [{ bib: "2", role: "leader" }, { bib: "1", role: "follower" }])).rejects.toMatchObject({ code: "invalid" });
+      await expect(store.addCompetitors(contest.id, [{ bib: "3", role: "leader" }, { bib: "3", role: "follower" }])).rejects.toMatchObject({ code: "invalid" });
+      await expect(store.addCompetitors(contest.id, [{ bib: "4 4", role: "leader" }])).rejects.toMatchObject({ code: "invalid" });
+      expect((await store.listCompetitors(contest.id)).map((c) => c.bib)).toEqual(["1"]);
+
+      const [two] = await store.addCompetitors(contest.id, [{ bib: "2", role: "follower" }]);
+      await expect(store.updateCompetitor(two.id, { bib: "1" })).rejects.toMatchObject({ code: "invalid" });
+    });
+
+    it("keeps a round panel with one chief judge who judges both roles", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      const round = await store.addRound(contest.id, "prelim");
+      await store.addJudge(round.id, { name: "Lee", assignment: "leaders" });
+      const chief = await store.addJudge(round.id, { name: " Cat ", assignment: "leaders", isChief: true });
+      expect(chief).toMatchObject({ name: "Cat", assignment: "both", isChief: true });
+      await expect(store.addJudge(round.id, { name: "Two", assignment: "both", isChief: true })).rejects.toMatchObject({ code: "invalid" });
+      await expect(store.addJudge(round.id, { name: "  ", assignment: "followers" })).rejects.toMatchObject({ code: "invalid" });
+
+      const fay = await store.addJudge(round.id, { name: "Fay", assignment: "followers" });
+      expect((await store.listJudges(round.id)).map((j) => j.name)).toEqual(["Cat", "Lee", "Fay"]);
+
+      expect(await store.updateJudge(fay.id, { assignment: "both" })).toMatchObject({ assignment: "both" });
+      await store.removeJudge(chief.id);
+      expect((await store.listJudges(round.id)).map((j) => j.name)).toEqual(["Lee", "Fay"]);
+    });
+
+    it("saves heats with redancers, replaces them, and drops a removed competitor", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      const round = await store.addRound(contest.id, "prelim");
+      await store.addCompetitors(contest.id, [
+        ...["1", "2", "3"].map((bib) => ({ bib, role: "leader" as const })),
+        ...["101", "102"].map((bib) => ({ bib, role: "follower" as const }))
+      ]);
+      expect(await store.listHeats(round.id)).toEqual([]);
+
+      const heats = buildHeats({ leaders: ["1", "2", "3"], followers: ["101", "102"], maxPerHeat: 2 });
+      const saved = await store.saveHeats(round.id, heats);
+      const shape = (list: typeof saved) =>
+        list.map((heat) => ({
+          number: heat.number,
+          leaders: heat.leaders.map((s) => `${s.bib}${s.redancer ? "*" : ""}`),
+          followers: heat.followers.map((s) => `${s.bib}${s.redancer ? "*" : ""}`)
+        }));
+      expect(shape(saved)).toEqual([
+        { number: 1, leaders: ["1", "2"], followers: ["101", "102"] },
+        { number: 2, leaders: ["3", "1*"], followers: ["101*", "102*"] }
+      ]);
+      expect(shape(await store.listHeats(round.id))).toEqual(shape(saved));
+
+      await store.saveHeats(round.id, buildHeats({ leaders: ["1", "2", "3"], followers: ["101", "102"], maxPerHeat: 3 }));
+      expect(await store.listHeats(round.id)).toHaveLength(1);
+
+      const three = (await store.listCompetitors(contest.id)).find((c) => c.bib === "3")!;
+      await store.removeCompetitor(three.id);
+      expect((await store.listHeats(round.id))[0].leaders.map((s) => s.bib)).toEqual(["1", "2"]);
+    });
+
+    it("rejects heats with an unknown bib or a dancer in the wrong role, keeping the old heats", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      const round = await store.addRound(contest.id, "prelim");
+      const final = await store.addRound(contest.id, "final");
+      await store.addCompetitors(contest.id, [{ bib: "1", role: "leader" }, { bib: "101", role: "follower" }]);
+      await store.saveHeats(round.id, buildHeats({ leaders: ["1"], followers: ["101"], maxPerHeat: 5 }));
+
+      await expect(store.saveHeats(round.id, buildHeats({ leaders: ["1", "7"], followers: ["101"], maxPerHeat: 5 }))).rejects.toMatchObject({ code: "invalid" });
+      await expect(store.saveHeats(round.id, buildHeats({ leaders: ["101"], followers: ["1"], maxPerHeat: 5 }))).rejects.toMatchObject({ code: "invalid" });
+      await expect(store.saveHeats(final.id, buildHeats({ leaders: ["1"], followers: ["101"], maxPerHeat: 5 }))).rejects.toMatchObject({ code: "invalid" });
+      expect((await store.listHeats(round.id))[0].leaders.map((s) => s.bib)).toEqual(["1"]);
     });
   });
 }
