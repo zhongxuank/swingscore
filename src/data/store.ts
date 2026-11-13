@@ -1,5 +1,15 @@
 import type { RoundStage } from "@/core/round-rules";
-import type { Contest, Round, RoundSettings } from "./types";
+import type { Heat } from "@/core/heats";
+import type {
+  Competitor,
+  Contest,
+  NewCompetitor,
+  NewRoundJudge,
+  Round,
+  RoundJudge,
+  RoundSettings,
+  SavedHeat
+} from "./types";
 
 export type StoreErrorCode = "not_found" | "invalid";
 
@@ -30,4 +40,24 @@ export interface ContestStore {
   listRounds(contestId: string): Promise<Round[]>;
   getRound(id: string): Promise<Round>;
   updateRoundSettings(id: string, settings: RoundSettings): Promise<Round>;
+
+  /** Adds several competitors at once, all or none. Rejects a bib already in the contest or repeated in the list. */
+  addCompetitors(contestId: string, competitors: NewCompetitor[]): Promise<Competitor[]>;
+  /** In bib order (numeric where bibs are numbers). */
+  listCompetitors(contestId: string): Promise<Competitor[]>;
+  updateCompetitor(id: string, changes: Partial<NewCompetitor>): Promise<Competitor>;
+  /** Also removes the competitor from any saved heats. */
+  removeCompetitor(id: string): Promise<void>;
+
+  /** Rejects a second chief judge. A chief judge always judges both roles. */
+  addJudge(roundId: string, judge: NewRoundJudge): Promise<RoundJudge>;
+  /** Chief judge first, then in the order added. */
+  listJudges(roundId: string): Promise<RoundJudge[]>;
+  updateJudge(id: string, changes: Partial<NewRoundJudge>): Promise<RoundJudge>;
+  removeJudge(id: string): Promise<void>;
+
+  /** Replaces a callback round's heats in one step. Every bib must be a competitor of the contest in that role. */
+  saveHeats(roundId: string, heats: Heat[]): Promise<SavedHeat[]>;
+  /** The saved heats, or an empty list when none are saved. */
+  listHeats(roundId: string): Promise<SavedHeat[]>;
 }

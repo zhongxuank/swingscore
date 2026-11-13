@@ -23,3 +23,21 @@ export function cleanContestName(name: string): string {
   if (trimmed === "") throw new StoreError("invalid", "A contest needs a name.");
   return trimmed;
 }
+
+const BIB_PATTERN = /^[0-9A-Za-z-]{1,12}$/;
+
+/** Trims a bib and checks it is 1 to 12 letters, digits or dashes. */
+export function cleanBib(bib: string): string {
+  const trimmed = bib.trim();
+  if (!BIB_PATTERN.test(trimmed)) throw new StoreError("invalid", `"${bib}" is not a valid bib. Use up to 12 letters, digits or dashes.`);
+  return trimmed;
+}
+
+export function cleanJudgeName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed === "") throw new StoreError("invalid", "Every judge needs a name.");
+  return trimmed;
+}
+
+/** Bib order: numeric where bibs are numbers, so 9 comes before 10. */
+export const compareBibs = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });

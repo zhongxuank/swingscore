@@ -6,7 +6,7 @@ import { checkNewStage, ROUND_STAGES, STAGE_LABELS, type RoundStage } from "@/co
 import { errorMessage, useContestStore } from "@/components/use-contest-store";
 import { StoreError } from "@/data/store";
 import type { Contest, Round } from "@/data/types";
-import { RoundSettingsForm } from "./round-settings-form";
+import { CompetitorsSection } from "./competitors-section";
 
 export function ContestDetail({ contestId }: { contestId: string }) {
   const store = useContestStore();
@@ -102,9 +102,20 @@ export function ContestDetail({ contestId }: { contestId: string }) {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Rounds</h2>
         {rounds.length === 0 ? <p className="text-sm text-gray-500">No rounds yet. Add the first one below.</p> : null}
-        {rounds.map((round) => (
-          <RoundSettingsForm key={round.id} round={round} onSave={(settings) => run(() => store.updateRoundSettings(round.id, settings))} />
-        ))}
+        {rounds.length > 0 ? (
+          <ul className="divide-y divide-gray-200 rounded border border-gray-200">
+            {rounds.map((round) => (
+              <li key={round.id}>
+                <Link href={`/contests/${contestId}/rounds/${round.id}`} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                  <span className="font-medium">
+                    {round.position}. {STAGE_LABELS[round.stage]}
+                  </span>
+                  <span className="text-xs text-gray-500">{round.kind === "callback" ? "Callback round" : "Final round"} · Set up</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {addable.length > 0 ? (
           <div className="flex flex-wrap gap-2">
@@ -123,6 +134,8 @@ export function ContestDetail({ contestId }: { contestId: string }) {
           <p className="text-sm text-gray-500">The final is the last round.</p>
         )}
       </section>
+
+      <CompetitorsSection contestId={contestId} />
 
       {!contest.archivedAt ? (
         <button type="button" onClick={() => void run(() => store.archiveContest(contestId))} className="text-sm text-gray-600 underline">
