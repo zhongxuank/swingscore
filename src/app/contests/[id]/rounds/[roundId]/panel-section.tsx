@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { validatePanel, type Panel } from "@/core/panel";
 import { errorMessage, useContestStore } from "@/components/use-contest-store";
 import type { JudgeAssignment, Round, RoundJudge } from "@/data/types";
+import { LinksSection } from "./links-section";
 
 const ASSIGNMENT_LABELS: Record<JudgeAssignment, string> = { leaders: "Leaders", followers: "Followers", both: "Both roles" };
 
@@ -70,6 +71,7 @@ export function PanelSection({ round }: { round: Round }) {
   const problems = validatePanel(round.kind, toPanel(round, judges));
 
   return (
+    <>
     <section className="space-y-3" aria-label="Panel">
       <h2 className="text-lg font-semibold">Panel</h2>
 
@@ -180,5 +182,7 @@ export function PanelSection({ round }: { round: Round }) {
         <p className="text-sm text-green-700">Panel is complete.</p>
       )}
     </section>
+    <LinksSection round={round} judges={judges} />
+    </>
   );
 }

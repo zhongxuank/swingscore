@@ -1,6 +1,8 @@
 import type { RoundStage } from "@/core/round-rules";
 import type { Heat } from "@/core/heats";
 import type {
+  AccessLinkInfo,
+  AccessLinkTarget,
   Competitor,
   Contest,
   NewCompetitor,
@@ -60,4 +62,13 @@ export interface ContestStore {
   saveHeats(roundId: string, heats: Heat[]): Promise<SavedHeat[]>;
   /** The saved heats, or an empty list when none are saved. */
   listHeats(roundId: string): Promise<SavedHeat[]>;
+
+  /**
+   * Makes a private link for a judge (or chief judge) or the round's emcee, replacing any earlier one, which then
+   * stops working. Returns the raw token, which is not stored and cannot be read back later.
+   */
+  createAccessLink(roundId: string, target: AccessLinkTarget): Promise<{ token: string; link: AccessLinkInfo }>;
+  listAccessLinks(roundId: string): Promise<AccessLinkInfo[]>;
+  /** Stops a link working. */
+  revokeAccessLink(id: string): Promise<void>;
 }

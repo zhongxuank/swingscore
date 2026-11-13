@@ -71,3 +71,17 @@ export interface SavedHeat {
   leaders: SavedHeatSlot[];
   followers: SavedHeatSlot[];
 }
+
+export type AccessLinkKind = "judge" | "emcee";
+
+/** A private link as the organiser sees it. The token itself is shown once, when the link is made. */
+export interface AccessLinkInfo {
+  id: string;
+  roundId: string;
+  kind: AccessLinkKind;
+  /** The judge (or chief judge) the link is for. Null for the emcee link. */
+  judgeId: string | null;
+  createdAt: string;
+}
+
+export type AccessLinkTarget = { kind: "judge"; judgeId: string } | { kind: "emcee" };

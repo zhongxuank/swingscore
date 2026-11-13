@@ -181,5 +181,28 @@ export function runContestStoreContract(name: string, makeStore: () => Promise<C
       await expect(store.saveHeats(final.id, buildHeats({ leaders: ["1"], followers: ["101"], maxPerHeat: 5 }))).rejects.toMatchObject({ code: "invalid" });
       expect((await store.listHeats(round.id))[0].leaders.map((s) => s.bib)).toEqual(["1"]);
     });
+    it("makes private links that replace earlier ones and can be revoked", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      const round = await store.addRound(contest.id, "prelim");
+      const lee = await store.addJudge(round.id, { name: "Lee", assignment: "leaders" });
+
+      const first = await store.createAccessLink(round.id, { kind: "judge", judgeId: lee.id });
+      expect(first.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(first.link).toMatchObject({ kind: "judge", judgeId: lee.id, roundId: round.id });
+      const second = await store.createAccessLink(round.id, { kind: "judge", judgeId: lee.id });
+      expect(second.token).not.toBe(first.token);
+      const emcee = await store.createAccessLink(round.id, { kind: "emcee" });
+      expect(emcee.link.judgeId).toBeNull();
+
+      const listed = await store.listAccessLinks(round.id);
+      expect(listed.map((link) => link.id).sort()).toEqual([second.link.id, emcee.link.id].sort());
+      expect(JSON.stringify(listed)).not.toContain(second.token);
+
+      await store.revokeAccessLink(emcee.link.id);
+      expect(await store.listAccessLinks(round.id)).toHaveLength(1);
+      await store.removeJudge(lee.id);
+      expect(await store.listAccessLinks(round.id)).toEqual([]);
+    });
   });
 }

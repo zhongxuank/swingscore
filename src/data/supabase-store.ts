@@ -1,9 +1,10 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { checkNewStage, kindForStage, type RoundKind, type RoundStage } from "@/core/round-rules";
+import { hashAccessToken, newAccessToken } from "@/lib/access-token";
 import { heatsToSlots, slotsToHeats, type HeatSlotRecord } from "./heat-slots";
 import { checkRoundSettings, cleanBib, cleanContestName, cleanJudgeName, compareBibs } from "./settings";
 import { StoreError, type ContestStore } from "./store";
-import type { Competitor, Contest, DancerRole, JudgeAssignment, Round, RoundJudge, RoundSettings, RoundStatus } from "./types";
+import type { AccessLinkInfo, AccessLinkKind, Competitor, Contest, DancerRole, JudgeAssignment, Round, RoundJudge, RoundSettings, RoundStatus } from "./types";
 
 interface ContestRow {
   id: string;
@@ -49,6 +50,17 @@ interface HeatSlotRow {
   competitor_id: string;
   redancer: boolean;
 }
+
+interface LinkRow {
+  id: string;
+  round_id: string;
+  kind: AccessLinkKind;
+  judge_id: string | null;
+  created_at: string;
+}
+
+const LINK_COLUMNS = "id, round_id, kind, judge_id, created_at";
+const toLink = (row: LinkRow): AccessLinkInfo => ({ id: row.id, roundId: row.round_id, kind: row.kind, judgeId: row.judge_id, createdAt: row.created_at });
 
 const COMPETITOR_COLUMNS = "id, contest_id, bib, role, name";
 const JUDGE_COLUMNS = "id, round_id, name, assignment, is_chief";
@@ -144,7 +156,7 @@ export function createSupabaseStore(client: SupabaseClient): ContestStore {
   };
 
   /** Deletes rows matching a filter and reports not_found when nothing was there (or it is not this organiser's). */
-  const deleteOne = async (table: "contest_competitors" | "round_judges", id: string, what: string) => {
+  const deleteOne = async (table: "contest_competitors" | "round_judges" | "round_access_links", id: string, what: string) => {
     const { data, error } = await client.from(table).delete().eq("id", id).select("id");
     if (error) throw toStoreError(error, what);
     if (!data || data.length === 0) throw new StoreError("not_found", `${what} not found.`);
@@ -316,6 +328,42 @@ export function createSupabaseStore(client: SupabaseClient): ContestStore {
 
     async listHeats(roundId) {
       return fetchHeats(await fetchRound(roundId));
+    },
+
+    async createAccessLink(roundId, target) {
+      await fetchRound(roundId);
+      if (target.kind === "judge") {
+        const judge = await fetchJudge(target.judgeId);
+        if (judge.roundId !== roundId) throw new StoreError("not_found", `Judge ${target.judgeId} not found.`);
+      }
+      // Replace the earlier link, so it stops working.
+      let old = client.from("round_access_links").delete().eq("round_id", roundId).eq("kind", target.kind);
+      old = target.kind === "judge" ? old.eq("judge_id", target.judgeId) : old.is("judge_id", null);
+      const removed = await old;
+      if (removed.error) throw toStoreError(removed.error, "Link");
+
+      const token = newAccessToken();
+      const row = {
+        round_id: roundId,
+        kind: target.kind,
+        judge_id: target.kind === "judge" ? target.judgeId : null,
+        token_hash: await hashAccessToken(token)
+      };
+      const link = toLink(unwrap(await client.from("round_access_links").insert(row).select(LINK_COLUMNS).single<LinkRow>(), "Link"));
+      return { token, link };
+    },
+
+    async listAccessLinks(roundId) {
+      await fetchRound(roundId);
+      const rows = unwrap(
+        await client.from("round_access_links").select(LINK_COLUMNS).eq("round_id", roundId).order("created_at").returns<LinkRow[]>(),
+        "Links"
+      );
+      return rows.map(toLink);
+    },
+
+    async revokeAccessLink(id) {
+      await deleteOne("round_access_links", id, `Link ${id}`);
     }
   };
 }

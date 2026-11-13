@@ -2,7 +2,8 @@ import { checkNewStage, kindForStage, type RoundStage } from "@/core/round-rules
 import { StoreError, type ContestStore } from "./store";
 import { checkRoundSettings, cleanBib, cleanContestName, cleanJudgeName, compareBibs } from "./settings";
 import { heatsToSlots, slotsToHeats, type HeatSlotRecord } from "./heat-slots";
-import type { Competitor, Contest, Round, RoundJudge, RoundSettings } from "./types";
+import { hashAccessToken, newAccessToken } from "@/lib/access-token";
+import type { AccessLinkInfo, Competitor, Contest, Round, RoundJudge, RoundSettings } from "./types";
 
 /** In-memory store for tests and offline development. Holds the same rules the database version must hold. */
 export function createMemoryStore(now: () => Date = () => new Date()): ContestStore {
@@ -11,6 +12,7 @@ export function createMemoryStore(now: () => Date = () => new Date()): ContestSt
   const competitors = new Map<string, Competitor>();
   const judges = new Map<string, RoundJudge & { order: number }>();
   const heatSlots = new Map<string, HeatSlotRecord[]>();
+  const links = new Map<string, AccessLinkInfo & { tokenHash: string }>();
   let counter = 0;
   const nextId = (prefix: string) => `${prefix}-${(counter += 1)}`;
   const stamp = () => now().toISOString();
@@ -223,6 +225,38 @@ export function createMemoryStore(now: () => Date = () => new Date()): ContestSt
     async listHeats(roundId) {
       const round = getRound(roundId);
       return slotsToHeats(heatSlots.get(roundId) ?? [], competitorsOf(round.contestId));
+    },
+
+    async createAccessLink(roundId, target) {
+      getRound(roundId);
+      if (target.kind === "judge") {
+        const judge = judges.get(target.judgeId);
+        if (!judge || judge.roundId !== roundId) throw new StoreError("not_found", `Judge ${target.judgeId} not found.`);
+      }
+      const judgeId = target.kind === "judge" ? target.judgeId : null;
+      for (const [id, link] of links) {
+        if (link.roundId === roundId && link.kind === target.kind && link.judgeId === judgeId) links.delete(id);
+      }
+      const token = newAccessToken();
+      const link = { id: nextId("link"), roundId, kind: target.kind, judgeId, createdAt: stamp(), tokenHash: await hashAccessToken(token) };
+      links.set(link.id, link);
+      const { tokenHash: _hash, ...info } = link;
+      void _hash;
+      return { token, link: info };
+    },
+
+    async listAccessLinks(roundId) {
+      getRound(roundId);
+      return [...links.values()]
+        .filter((link) => link.roundId === roundId && (link.judgeId === null || judges.has(link.judgeId)))
+        .map(({ tokenHash: _hash, ...info }) => {
+          void _hash;
+          return info;
+        });
+    },
+
+    async revokeAccessLink(id) {
+      if (!links.delete(id)) throw new StoreError("not_found", `Link ${id} not found.`);
     }
   };
 }
