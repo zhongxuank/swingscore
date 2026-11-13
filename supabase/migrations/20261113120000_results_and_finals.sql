@@ -1,5 +1,5 @@
 -- Swingscore: chief judge results for callback rounds, finals couples, finals scores and placements,
--- and what the emcee sees. Run this once in the Supabase SQL editor, after 20261113110000_private_links_and_scores.sql.
+-- and what the emcee sees. Names avoid the old app's tables (final_placements and others). Run this once in the Supabase SQL editor, after 20261113110000_private_links_and_scores.sql.
 
 create type callback_result_status as enum ('advancing', 'alternate', 'out');
 
@@ -55,7 +55,7 @@ create table final_submissions (
 );
 
 -- Final placements as decided by the organiser after Relative Placement (including any tie they settled).
-create table final_placements (
+create table final_round_placements (
   round_id uuid not null references rounds (id) on delete cascade,
   couple_id uuid not null references final_couples (id) on delete cascade,
   place integer not null check (place >= 1),
@@ -71,7 +71,7 @@ alter table round_results enable row level security;
 alter table final_couples enable row level security;
 alter table final_scores enable row level security;
 alter table final_submissions enable row level security;
-alter table final_placements enable row level security;
+alter table final_round_placements enable row level security;
 
 create function final_scoring_started(target uuid) returns boolean
 language sql stable security definer set search_path = public as $$
@@ -95,7 +95,7 @@ create policy "organiser removes couples before scoring" on final_couples for de
 create policy "organiser reads final scores" on final_scores for select to authenticated using (owns_round(round_id));
 create policy "organiser reads final submissions" on final_submissions for select to authenticated using (owns_round(round_id));
 create policy "organiser reopens final sheets" on final_submissions for delete to authenticated using (owns_round(round_id));
-create policy "organiser manages placements" on final_placements for all to authenticated
+create policy "organiser manages placements" on final_round_placements for all to authenticated
   using (owns_round(round_id)) with check (owns_round(round_id));
 
 -- Replaces a final's couples in one step. couples is a JSON array of {couple_number, leader_id, follower_id}.
@@ -344,7 +344,7 @@ begin
       from round_results r where r.round_id = rnd.id
     ), '[]'::jsonb) else '[]'::jsonb end,
     'placements', case when link.kind = 'emcee' then coalesce((
-      select jsonb_agg(jsonb_build_object('coupleId', p.couple_id, 'place', p.place) order by p.place) from final_placements p where p.round_id = rnd.id
+      select jsonb_agg(jsonb_build_object('coupleId', p.couple_id, 'place', p.place) order by p.place) from final_round_placements p where p.round_id = rnd.id
     ), '[]'::jsonb) else '[]'::jsonb end
   );
 end;

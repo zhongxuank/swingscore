@@ -463,17 +463,17 @@ export function createSupabaseStore(client: SupabaseClient): ContestStore {
     async savePlacements(roundId, list) {
       await fetchRound(roundId);
       if (new Set(list.map((p) => p.place)).size !== list.length) throw new StoreError("invalid", "Two couples cannot share a place.");
-      const removed = await client.from("final_placements").delete().eq("round_id", roundId);
+      const removed = await client.from("final_round_placements").delete().eq("round_id", roundId);
       if (removed.error) throw toStoreError(removed.error, "Placements");
       if (list.length === 0) return;
-      const { error } = await client.from("final_placements").insert(list.map((p) => ({ round_id: roundId, couple_id: p.coupleId, place: p.place })));
+      const { error } = await client.from("final_round_placements").insert(list.map((p) => ({ round_id: roundId, couple_id: p.coupleId, place: p.place })));
       if (error) throw toStoreError(error, "Placements");
     },
 
     async listPlacements(roundId) {
       await fetchRound(roundId);
       const rows = unwrap(
-        await client.from("final_placements").select("couple_id, place").eq("round_id", roundId).order("place").returns<{ couple_id: string; place: number }[]>(),
+        await client.from("final_round_placements").select("couple_id, place").eq("round_id", roundId).order("place").returns<{ couple_id: string; place: number }[]>(),
         "Placements"
       );
       return rows.map((r) => ({ coupleId: r.couple_id, place: r.place }));
