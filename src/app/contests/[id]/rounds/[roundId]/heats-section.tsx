@@ -27,17 +27,16 @@ export function HeatsSection({ round }: { round: Round }) {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const firstRound = round.position === 1;
 
   const load = useCallback(async () => {
     try {
-      const [saved, list] = await Promise.all([store.listHeats(round.id), store.listCompetitors(round.contestId)]);
+      const [saved, list] = await Promise.all([store.listHeats(round.id), store.listRoundEntries(round.id)]);
       setHeats(saved);
       setCompetitors(list);
     } catch (problem) {
       setError(errorMessage(problem));
     }
-  }, [store, round.id, round.contestId]);
+  }, [store, round.id]);
 
   useEffect(() => {
     void load();
@@ -57,12 +56,13 @@ export function HeatsSection({ round }: { round: Round }) {
 
   if (!heats) return <p className="text-sm text-gray-500">{error ?? "Loading heats…"}</p>;
 
-  const blocked = !firstRound
-    ? "Entries for later rounds come from the previous round's cut. Heats for this round arrive with the chief judge tools."
-    : round.maxPerHeat === null
+  const blocked =
+    round.maxPerHeat === null
       ? "Set Max per heat above, then build heats."
       : competitors.length === 0
-        ? "Add competitors to the contest first."
+        ? round.position === 1
+          ? "Add competitors to the contest first."
+          : "Waiting for the chief judge to decide the previous round's cut."
         : null;
   const stale = heats.length > 0 && !heatsMatch(heats, competitors, round.maxPerHeat);
 

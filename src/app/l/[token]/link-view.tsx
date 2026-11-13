@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { STAGE_LABELS } from "@/core/round-rules";
 import { useAccessStore } from "@/components/use-access";
 import type { AccessView } from "@/data/access";
+import { ChiefTools } from "./chief-tools";
 import { EmceeView } from "./emcee-view";
+import { FinalSheet } from "./final-sheet";
 import { JudgeSheet } from "./judge-sheet";
 
 type State = { kind: "loading" } | { kind: "bad" } | { kind: "error"; message: string } | { kind: "ready"; view: AccessView };
@@ -12,6 +14,7 @@ type State = { kind: "loading" } | { kind: "bad" } | { kind: "error"; message: s
 export function LinkView({ token }: { token: string }) {
   const access = useAccessStore();
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [tab, setTab] = useState<"score" | "results">("score");
 
   const load = useCallback(async () => {
     try {
@@ -59,7 +62,31 @@ export function LinkView({ token }: { token: string }) {
           {view.kind === "emcee" ? "Emcee" : view.judge?.isChief ? `Chief judge: ${view.judge.name}` : `Judge: ${view.judge?.name}`}
         </h1>
       </header>
-      {view.kind === "emcee" ? <EmceeView view={view} /> : <JudgeSheet token={token} view={view} onReload={load} />}
+      {view.kind === "emcee" ? (
+        <EmceeView view={view} />
+      ) : view.round.kind === "final" ? (
+        <FinalSheet token={token} view={view} onReload={load} />
+      ) : view.judge?.isChief ? (
+        <>
+          <div className="flex gap-2 px-4 pt-3" role="tablist" aria-label="Chief judge">
+            {(["score", "results"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={tab === value}
+                onClick={() => setTab(value)}
+                className={`flex-1 rounded px-3 py-1.5 text-sm font-medium ${tab === value ? "bg-gray-900 text-white" : "border border-gray-300"}`}
+              >
+                {value === "score" ? "My sheet" : "Counts and cut"}
+              </button>
+            ))}
+          </div>
+          {tab === "score" ? <JudgeSheet token={token} view={view} onReload={load} /> : <ChiefTools token={token} view={view} onReload={load} />}
+        </>
+      ) : (
+        <JudgeSheet token={token} view={view} onReload={load} />
+      )}
     </div>
   );
 }

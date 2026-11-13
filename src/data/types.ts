@@ -85,3 +85,48 @@ export interface AccessLinkInfo {
 }
 
 export type AccessLinkTarget = { kind: "judge"; judgeId: string } | { kind: "emcee" };
+
+export type CallbackResultStatus = "advancing" | "alternate" | "out";
+
+/** The chief judge's stored decision for one role of a callback round. */
+export interface RoundCut {
+  role: DancerRole;
+  cut: number;
+  alternates: number;
+  decidedAt: string;
+}
+
+export interface RoundResult {
+  competitorId: string;
+  role: DancerRole;
+  rank: number;
+  pointsX100: number;
+  status: CallbackResultStatus;
+  alternateOrder: number | null;
+}
+
+export interface FinalCouple {
+  id: string;
+  roundId: string;
+  number: number;
+  leaderId: string;
+  followerId: string;
+}
+
+/** Who has submitted what in a round. `role` is null for a final sheet. */
+export interface SheetSubmission {
+  judgeId: string;
+  role: DancerRole | null;
+  submittedAt: string;
+}
+
+export interface FinalScoreRow {
+  judgeId: string;
+  coupleId: string;
+  tenths: number;
+}
+
+export interface FinalPlacement {
+  coupleId: string;
+  place: number;
+}

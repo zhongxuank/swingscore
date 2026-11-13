@@ -17,7 +17,7 @@ function toPanel(round: Round, judges: RoundJudge[]): Panel {
   };
 }
 
-export function PanelSection({ round }: { round: Round }) {
+export function PanelSection({ round, onJudges }: { round: Round; onJudges?: (judges: RoundJudge[]) => void }) {
   const store = useContestStore();
   const [judges, setJudges] = useState<RoundJudge[] | null>(null);
   const [name, setName] = useState("");
@@ -28,11 +28,13 @@ export function PanelSection({ round }: { round: Round }) {
 
   const load = useCallback(async () => {
     try {
-      setJudges(await store.listJudges(round.id));
+      const list = await store.listJudges(round.id);
+      setJudges(list);
+      onJudges?.(list);
     } catch (problem) {
       setError(errorMessage(problem));
     }
-  }, [store, round.id]);
+  }, [store, round.id, onJudges]);
 
   useEffect(() => {
     void load();

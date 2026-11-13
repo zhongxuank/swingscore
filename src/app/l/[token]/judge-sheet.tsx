@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MarkStatus } from "@/core/callback";
-import { formatScore, MAX_SCORE } from "@/core/score";
+import { MAX_SCORE } from "@/core/score";
 import { useAccessStore } from "@/components/use-access";
 import type { AccessView } from "@/data/access";
 import type { DancerRole } from "@/data/types";
-import { buildRoleSheet, sheetMarks, submitProblems, tapToTenths, type SheetRow } from "@/lib/judge-sheet";
+import { buildRoleSheet, sheetMarks, submitProblems, type SheetRow } from "@/lib/judge-sheet";
 import { createScoreQueue, type QueueState } from "@/lib/score-queue";
-
-const DOUBLE_TAP_MS = 350;
+import { ScoreTrack } from "./score-track";
 
 const BAND: Record<MarkStatus | "none", { row: string; marker: string; label: string }> = {
   yes: { row: "bg-green-50", marker: "bg-green-600", label: "Yes" },
@@ -20,8 +19,8 @@ const BAND: Record<MarkStatus | "none", { row: string; marker: string; label: st
 
 const ROLE_TITLE: Record<DancerRole, string> = { leader: "Leaders", follower: "Followers" };
 
-function queueStorage(token: string) {
-  const key = `swingscore-scores-${token.slice(0, 16)}`;
+export function queueStorage(token: string, kind = "scores") {
+  const key = `swingscore-${kind}-${token.slice(0, 16)}`;
   return {
     read: () => {
       try {
@@ -52,7 +51,6 @@ export function JudgeSheet({ token, view, onReload }: { token: string; view: Acc
   const [submitError, setSubmitError] = useState<string | null>(null);
   const queueRef = useRef<ReturnType<typeof createScoreQueue> | null>(null);
   const lastChange = useRef(0);
-  const lastTap = useRef<{ id: string; at: number } | null>(null);
 
   // Start the save queue once. Unsent changes from an earlier visit win over what the server sent.
   useEffect(() => {
@@ -98,21 +96,6 @@ export function JudgeSheet({ token, view, onReload }: { token: string; view: Acc
     });
     setConfirming(false);
     queueRef.current?.enqueue({ competitorId, tenths: tenths === null ? null : Math.min(Math.max(tenths, 0), MAX_SCORE), changedAt: new Date(now).toISOString() });
-  }
-
-  function onTrackTap(event: PointerEvent<HTMLDivElement>, row: SheetRow) {
-    if (row.redancer || locked) return;
-    const now = event.timeStamp;
-    const previous = lastTap.current;
-    lastTap.current = { id: row.competitorId, at: now };
-    if (!previous || previous.id !== row.competitorId || now - previous.at > DOUBLE_TAP_MS) return;
-    lastTap.current = null;
-    if (scores.has(row.competitorId)) {
-      setScore(row.competitorId, null);
-    } else {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setScore(row.competitorId, tapToTenths(event.clientX - rect.left, rect.width));
-    }
   }
 
   async function onSubmit() {
@@ -242,39 +225,15 @@ export function JudgeSheet({ token, view, onReload }: { token: string; view: Acc
               {row.redancer ? (
                 <span className="flex-1 text-sm">Redancer, scored in heat {sheet.dancers.find((d) => d.competitorId === row.competitorId)?.heatNumber}</span>
               ) : (
-                <div
-                  data-testid={`track-${row.bib}`}
-                  onPointerUp={(event) => onTrackTap(event, row)}
-                  className="relative h-11 flex-1 cursor-pointer rounded border border-gray-300 bg-white/60"
-                  style={{ touchAction: "manipulation" }}
-                  aria-label={`Score track for bib ${row.bib}. Double tap to ${score === undefined ? "score" : "clear"}.`}
-                >
-                  <div className="pointer-events-none absolute inset-y-0 left-1/2 border-l border-dashed border-gray-300" />
-                  {score !== undefined ? (
-                    <div
-                      className={`pointer-events-none absolute top-1 bottom-1 w-1.5 -translate-x-1/2 rounded ${band.marker}`}
-                      style={{ left: `${(score / MAX_SCORE) * 100}%` }}
-                    />
-                  ) : null}
-                </div>
+                <ScoreTrack
+                  label={`bib ${row.bib}`}
+                  testId={row.bib}
+                  score={score}
+                  markerClass={band.marker}
+                  locked={locked}
+                  onChange={(tenths) => setScore(row.competitorId, tenths)}
+                />
               )}
-              {!row.redancer ? (
-                <div className="flex w-28 shrink-0 items-center justify-end gap-1">
-                  {score !== undefined && !locked ? (
-                    <button type="button" aria-label={`Lower ${row.bib} by 0.1`} onClick={() => setScore(row.competitorId, score - 1)} className="h-9 w-7 rounded border border-gray-300 text-sm">
-                      −
-                    </button>
-                  ) : null}
-                  <span className="w-12 text-right font-mono text-sm" data-testid={`score-${row.bib}`}>
-                    {score !== undefined ? formatScore(score) : "–"}
-                  </span>
-                  {score !== undefined && !locked ? (
-                    <button type="button" aria-label={`Raise ${row.bib} by 0.1`} onClick={() => setScore(row.competitorId, score + 1)} className="h-9 w-7 rounded border border-gray-300 text-sm">
-                      +
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
             </li>
           );
         })}
