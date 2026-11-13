@@ -1,5 +1,6 @@
 import { checkNewStage, kindForStage, type RoundStage } from "@/core/round-rules";
 import { StoreError, type ContestStore } from "./store";
+import { checkRoundSettings, cleanContestName } from "./settings";
 import type { Contest, Round, RoundSettings } from "./types";
 
 /** In-memory store for tests and offline development. Holds the same rules the database version must hold. */
@@ -16,11 +17,7 @@ export function createMemoryStore(now: () => Date = () => new Date()): ContestSt
     return contest;
   };
 
-  const cleanName = (name: string): string => {
-    const trimmed = name.trim();
-    if (trimmed === "") throw new StoreError("invalid", "A contest needs a name.");
-    return trimmed;
-  };
+  const cleanName = cleanContestName;
 
   const save = (contest: Contest): Contest => {
     contests.set(contest.id, contest);
@@ -98,18 +95,7 @@ export function createMemoryStore(now: () => Date = () => new Date()): ContestSt
       const round = rounds.get(id);
       if (!round) throw new StoreError("not_found", `Round ${id} not found.`);
 
-      const callbackOnly = settings.yesCount !== undefined || settings.altCount !== undefined || settings.maxPerHeat !== undefined;
-      if (round.kind === "final" && callbackOnly) {
-        throw new StoreError("invalid", "Yes counts, alternate counts and heat sizes apply to callback rounds only.");
-      }
-      for (const [field, value] of Object.entries({ yesCount: settings.yesCount, altCount: settings.altCount })) {
-        if (value !== undefined && value !== null && (!Number.isInteger(value) || value < 0)) {
-          throw new StoreError("invalid", `${field} must be a whole number, zero or more.`);
-        }
-      }
-      if (settings.maxPerHeat !== undefined && settings.maxPerHeat !== null && (!Number.isInteger(settings.maxPerHeat) || settings.maxPerHeat < 1)) {
-        throw new StoreError("invalid", "maxPerHeat must be a whole number, one or more.");
-      }
+      checkRoundSettings(round, settings);
 
       const updated: Round = { ...round, ...settings };
       rounds.set(id, updated);
