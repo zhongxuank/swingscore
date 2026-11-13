@@ -1,9 +1,9 @@
 -- Swingscore: contests and rounds, visible only to the organiser who owns them.
 -- Run this once in the Supabase SQL editor.
 
-create type round_stage as enum ('prelim', 'quarter_final', 'semi_final', 'final');
-create type round_kind as enum ('callback', 'final');
-create type round_status as enum ('setup', 'scoring', 'complete');
+create type contest_round_stage as enum ('prelim', 'quarter_final', 'semi_final', 'final');
+create type contest_round_kind as enum ('callback', 'final');
+create type contest_round_status as enum ('setup', 'scoring', 'complete');
 
 create table contests (
   id uuid primary key default gen_random_uuid(),
@@ -17,9 +17,9 @@ create table rounds (
   id uuid primary key default gen_random_uuid(),
   contest_id uuid not null references contests (id) on delete cascade,
   position integer not null check (position >= 1),
-  stage round_stage not null,
-  kind round_kind not null,
-  status round_status not null default 'setup',
+  stage contest_round_stage not null,
+  kind contest_round_kind not null,
+  status contest_round_status not null default 'setup',
   yes_count integer check (yes_count >= 0),
   alt_count integer check (alt_count >= 0),
   max_per_heat integer check (max_per_heat >= 1),
