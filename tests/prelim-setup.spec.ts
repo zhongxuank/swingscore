@@ -27,7 +27,7 @@ test("organiser enters competitors, a panel and builds prelim heats with redance
     // A duplicate bib is refused and nothing is added.
     await page.getByLabel(/Add competitors, one per line/).fill("200 L\n5 L");
     await page.getByRole("button", { name: "Add competitors" }).click();
-    await expect(page.getByRole("alert")).toContainText("already in this contest");
+    await expect(page.getByText("Bib 5 is already in this contest.")).toBeVisible();
     await expect(page.getByText("70 leaders, 80 followers")).toBeVisible();
 
     await page.getByRole("button", { name: "Add Prelim" }).click();
@@ -44,10 +44,11 @@ test("organiser enters competitors, a panel and builds prelim heats with redance
     await expect(panel.getByLabel("Panel problems")).toContainText("Add a chief judge.");
     await panel.getByLabel("Chief judge name").fill("Cat");
     await panel.getByRole("button", { name: "Set chief judge" }).click();
-    await panel.getByLabel("Judge name").fill("Lee");
+    await expect(panel.getByText("judges both roles")).toBeVisible();
+    await panel.getByLabel("Judge name", { exact: true }).fill("Lee");
     await panel.getByRole("button", { name: "Add judge" }).click();
     await expect(panel.getByLabel("Panel problems")).toContainText("Add at least one judge for followers.");
-    await panel.getByLabel("Judge name").fill("Fay");
+    await panel.getByLabel("Judge name", { exact: true }).fill("Fay");
     await panel.getByLabel("New judge's role").selectOption("followers");
     await panel.getByRole("button", { name: "Add judge" }).click();
     await expect(panel.getByText("Panel is complete.")).toBeVisible();
@@ -75,7 +76,10 @@ test("organiser enters competitors, a panel and builds prelim heats with redance
     await page.getByRole("button", { name: "Remove leader 70" }).click();
     await expect(page.getByText("69 leaders, 80 followers")).toBeVisible();
     await page.getByRole("link", { name: /1\. Prelim/ }).click();
-    await expect(page.getByText("Competitors have changed since these heats were built.")).toBeVisible();
+    await expect(page.getByText("Competitors or the heat size have changed since these heats were built.")).toBeVisible();
+    await page.getByRole("button", { name: "Rebuild heats" }).click();
+    await expect(page.getByText("Competitors or the heat size have changed")).toHaveCount(0);
+    await expect(page.getByRole("list", { name: "Heat 4 leaders" }).getByRole("listitem").filter({ hasText: "(redancer)" })).toHaveCount(11);
   } finally {
     await organiser.remove();
   }

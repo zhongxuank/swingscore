@@ -31,7 +31,7 @@ async function signedInOrganiser(): Promise<SupabaseClient> {
   return client;
 }
 
-describe.skipIf(!live)("Supabase store (live)", () => {
+describe.skipIf(!live)("Supabase store (live)", { timeout: 30_000 }, () => {
   afterAll(async () => {
     const admin = createClient(url!, serviceKey!, noSession);
     for (const id of createdUsers) await admin.auth.admin.deleteUser(id);

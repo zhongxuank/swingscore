@@ -5,10 +5,20 @@ import { buildHeats } from "@/core/heats";
 import { errorMessage, useContestStore } from "@/components/use-contest-store";
 import type { Competitor, Round, SavedHeat } from "@/data/types";
 
-/** True when the saved heats hold exactly the current competitors (ignoring redancers). */
-function heatsMatch(heats: SavedHeat[], competitors: Competitor[]): boolean {
-  const onFloor = new Set(heats.flatMap((heat) => [...heat.leaders, ...heat.followers]).filter((slot) => !slot.redancer).map((slot) => slot.competitorId));
-  return onFloor.size === competitors.length && competitors.every((c) => onFloor.has(c.id));
+function buildFrom(competitors: Competitor[], maxPerHeat: number) {
+  return buildHeats({
+    leaders: competitors.filter((c) => c.role === "leader").map((c) => c.bib),
+    followers: competitors.filter((c) => c.role === "follower").map((c) => c.bib),
+    maxPerHeat
+  });
+}
+
+/** True when the saved heats are what building now would give, so no competitor or heat size changed since. */
+function heatsMatch(saved: SavedHeat[], competitors: Competitor[], maxPerHeat: number | null): boolean {
+  if (maxPerHeat === null) return false;
+  const key = (heats: Array<{ leaders: Array<{ bib: string; redancer: boolean }>; followers: Array<{ bib: string; redancer: boolean }> }>) =>
+    JSON.stringify(heats.map((heat) => [heat.leaders, heat.followers].map((slots) => slots.map((s) => `${s.bib}${s.redancer ? "R" : ""}`))));
+  return key(saved) === key(buildFrom(competitors, maxPerHeat));
 }
 
 export function HeatsSection({ round }: { round: Round }) {
@@ -38,12 +48,7 @@ export function HeatsSection({ round }: { round: Round }) {
     setBusy(true);
     setError(null);
     try {
-      const built = buildHeats({
-        leaders: competitors.filter((c) => c.role === "leader").map((c) => c.bib),
-        followers: competitors.filter((c) => c.role === "follower").map((c) => c.bib),
-        maxPerHeat: round.maxPerHeat
-      });
-      setHeats(await store.saveHeats(round.id, built));
+      setHeats(await store.saveHeats(round.id, buildFrom(competitors, round.maxPerHeat)));
     } catch (problem) {
       setError(errorMessage(problem));
     }
@@ -59,7 +64,7 @@ export function HeatsSection({ round }: { round: Round }) {
       : competitors.length === 0
         ? "Add competitors to the contest first."
         : null;
-  const stale = heats.length > 0 && !heatsMatch(heats, competitors);
+  const stale = heats.length > 0 && !heatsMatch(heats, competitors, round.maxPerHeat);
 
   return (
     <section className="space-y-3" aria-label="Heats">
@@ -78,7 +83,7 @@ export function HeatsSection({ round }: { round: Round }) {
       {blocked ? <p className="text-sm text-gray-600">{blocked}</p> : null}
       {stale ? (
         <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Competitors have changed since these heats were built. Rebuild heats to include everyone.
+          Competitors or the heat size have changed since these heats were built. Rebuild heats to update them.
         </p>
       ) : null}
       {error ? (

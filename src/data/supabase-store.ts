@@ -235,6 +235,10 @@ export function createSupabaseStore(client: SupabaseClient): ContestStore {
         seen.add(row.bib);
       }
       if (rows.length === 0) return [];
+      // Name the clashing bib for the organiser. The unique constraint still guards against a race.
+      const taken = new Set((await fetchCompetitors(contestId)).map((c) => c.bib));
+      const clash = rows.find((row) => taken.has(row.bib));
+      if (clash) throw new StoreError("invalid", `Bib ${clash.bib} is already in this contest.`);
       // One insert is one statement, so a clash on any bib adds none of them.
       const inserted = unwrap(await competitorTable().insert(rows).select(COMPETITOR_COLUMNS).returns<CompetitorRow[]>(), "Competitors");
       return inserted.map(toCompetitor);
