@@ -1,48 +1,26 @@
-# SwingScore
+# Swingscore
 
-SwingScore is a West Coast Swing contest scoring system. The Beta setup model treats a contest as the division-level container and runs Prelim, Semi-Final, and Final stages as separate rounds with their own judges, setup locks, scoring rules, and result snapshots.
+Live scoring for West Coast Swing contests. One organiser sets up a contest, judges score on their phones from private links, and results show on screen.
 
-For the current implementation status, handoff notes, limitations, and Beta roadmap, see [`docs/BETA_HANDOFF.md`](docs/BETA_HANDOFF.md).
+This is a rebuild. The old app is on `main` and is the reference. See `CONTEXT.md` for the words the code and docs use, and the Swingscore Rebuild Spec for the plan and the ticket order.
 
-## Quick Start
+## Layout
+
+- `src/core/` pure scoring logic: scores in tenths, ordinals, Relative Placement per the WSDC paper, callback marks, ranking with the chief judge tie-break, round rules.
+- `src/data/` the data layer screens use (`ContestStore`), an in-memory version, and the contract tests every version must pass.
+- `supabase/migrations/` database setup SQL. Run each file once in the Supabase SQL editor, in name order.
+- `src/app/` the Next.js app.
+
+## Commands
 
 ```bash
 npm install
-npm run dev
-```
-
-Open:
-
-- Admin: `http://localhost:3000/admin`
-- Contest Manager: `http://localhost:3000/admin/competitions`
-- Judge demo: `http://localhost:3000/judge/demo-judge`
-- Chief Judge demo: `http://localhost:3000/chief/demo-chief`
-- Emcee demo: `http://localhost:3000/emcee/demo-emcee`
-- Exports: `http://localhost:3000/export/demo-novice-jj`
-
-## Supabase
-
-The schema and environment placeholders are included, but production Supabase credentials are not required for the demo workspace.
-
-1. Create a Supabase project.
-2. Apply `supabase/migrations/0001_initial_schema.sql`.
-3. Copy `.env.example` to `.env.local`.
-4. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
-
-## Scoring Notes
-
-- Scores are stored as `score_x2` integer half-points. `0` means unscored.
-- Judges and Chief Judge always enter raw scores.
-- Callback Rounds are role-based and derive callbacks from rankings and the default WSDC callback profile: Yes `10`, Alt 1 `4.5`, Alt 2 `4.3`, Alt 3 `4.2`, No `0`.
-- Chief Judge modes are `none`, `tiebreak_only`, and `full_panel`.
-- In `tiebreak_only`, Chief Judge raw scores are excluded from original aggregation and used only after original calculations identify a meaningful boundary tie.
-- Final Rounds score couples, convert raw scores to ordinals, and use Relative Placement majority rules.
-- The UI does not claim WSDC approval or certification.
-
-## Verification
-
-```bash
+npm run dev        # http://localhost:3000
+npm test           # unit tests
 npm run typecheck
-npm test
-npm run build
+npm run lint
 ```
+
+## Environment
+
+Copy `.env.example` to `.env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the publishable key). `SUPABASE_SERVICE_ROLE_KEY` is only needed for the private judge links and must never be committed.
