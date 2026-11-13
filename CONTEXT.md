@@ -14,7 +14,7 @@ Swingscore scores West Coast Swing competitions live. This file defines the word
 - **Organiser**: the one person per event who signs in with an email link and sets everything up. Usually the project owner.
 - **Judge**: scores entries on a private link, with no account. Default is one role per judge. A judge may be assigned both roles, but that is not the default.
 - **Chief Judge (CJ)**: judges both roles by default, sets the Yes and Alternate counts, and decides the cut. Their raw score breaks ties. Whether it also counts in the panel is a per-round toggle, off by default.
-- **Raw score**: the number a judge gives an entry. Stored as integer half-points. Judges and the CJ always enter raw scores, never callbacks or placements directly.
+- **Raw score**: the number a judge gives an entry. Runs from 0.0 to 100.0 in steps of 0.1, stored as integer tenths (0 to 1000). An unscored entry has no value, so 0.0 is a real score. Judges and the CJ always enter raw scores, never callbacks or placements directly.
 - **Yes / Alternate / No**: a judge's mark for an entry in a Callback Round, derived from their raw-score ranking and the Yes and Alternate counts the CJ set.
 - **Cut**: the number of entries per role that advance. Decided by the CJ after scores are combined. It often differs from the Yes count, so it is never fixed in setup.
 - **Alternate**: an entry named as a backup for the cut, up to 3 per role, shown to the emcee (MC).
@@ -28,6 +28,7 @@ Swingscore scores West Coast Swing competitions live. This file defines the word
 
 - Scores autosave, queue offline, and sync when the connection returns.
 - A judge cannot submit two equal raw scores in a Final Round.
+- The CJ's raw scores never tie in any round, so any equal scores on a CJ sheet block submission.
 - Final Rounds need an odd counted panel (5 or 7 scoring judges, plus the CJ only if the toggle counts them).
 - A tie at the cut is resolved by the CJ's raw score.
 - The UI never claims WSDC approval or certification.
@@ -48,5 +49,6 @@ The old repo's `relative-placement.ts` reproduces the paper's full 12-couple exa
 
 ## Open items
 
+- Setup locks and emergency unlock are out of the first release.
 - Pro-Am and Strictly formats are out of the first release.
 - Exports (CSV, printable placement sheet) are out of the first release.
