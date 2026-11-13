@@ -32,8 +32,21 @@ Swingscore scores West Coast Swing competitions live. This file defines the word
 - A tie at the cut is resolved by the CJ's raw score.
 - The UI never claims WSDC approval or certification.
 
+## Relative Placement rules (source: Tigges, "Unraveling the Mystery of the Relative Placement Scoring System", updated 12.20.2021)
+
+1. Check each judge has no tied raw scores. Block submission if they do.
+2. Convert each judge's raw scores to ordinals (highest score is 1).
+3. Majority is more than half of the counting judges. Walk the levels 1st, 1st-2nd, 1st-3rd and so on, counting judges who placed an entry at that level or better. An entry is placed at the first level where its count reaches the majority.
+4. If several entries reach majority at the same level, place them all before moving to the next level. Break ties among them in this order:
+   1. Higher count at that level.
+   2. Lower sum of the ordinals that make up the count.
+   3. Move to the next level and compare counts only (more is better), repeating level by level.
+   4. Head to head: whichever entry a majority of judges placed above the other.
+5. The CJ's score is not used to break these ties. It counts only when the toggle makes it one of the counted judges, or to stand in for a judge whose sheet is unusable.
+
+The old repo's `relative-placement.ts` reproduces the paper's full 12-couple example and its head-to-head example (checked 2026-11-13). Two differences remain: it also compares sums at later levels (the paper compares counts only), and it falls back to bib order when head-to-head is tied. The rebuild should follow the paper and report an unresolved tie to the organiser instead of resolving it silently.
+
 ## Open items
 
-- The WSDC Relative Placement tiebreak order has not been read yet. The old repo's tiebreak (more majority, then lower sum, then head-to-head, then bib order) is a guess until checked.
 - Pro-Am and Strictly formats are out of the first release.
 - Exports (CSV, printable placement sheet) are out of the first release.
