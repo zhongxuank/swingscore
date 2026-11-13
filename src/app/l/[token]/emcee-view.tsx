@@ -26,7 +26,7 @@ export function EmceeView({ view }: { view: AccessView }) {
             <ol className="space-y-1 text-sm">
               {placed.map((couple) => (
                 <li key={couple.id}>
-                  <span className="inline-block w-10 font-semibold">{placeOf.get(couple.id)}.</span>
+                  <span className="inline-block w-10 font-semibold">{placeOf.get(couple.id)}.</span>{" "}
                   {who(couple.leaderId)} &amp; {who(couple.followerId)}
                 </li>
               ))}

@@ -38,7 +38,7 @@ test("organiser makes a judge link, and a wrong link shows nothing", async ({ pa
     await signIn(page, organiser.email, `/contests/${contest.id}/rounds/${round.id}`);
     const links = page.getByRole("region", { name: "Private links" });
     await links.getByRole("button", { name: "Make link for Lee" }).click();
-    const url = await links.getByLabel("Link for Lee").inputValue();
+    const url = await links.getByRole("textbox", { name: "Link for Lee" }).inputValue();
     expect(url).toMatch(/\/l\/[A-Za-z0-9_-]{43}$/);
 
     const judge = await (await browser.newContext()).newPage();
@@ -51,7 +51,7 @@ test("organiser makes a judge link, and a wrong link shows nothing", async ({ pa
 
     // Making a new link stops the old one.
     await links.getByRole("button", { name: "Make new link for Lee" }).click();
-    await expect(links.getByLabel("Link for Lee")).not.toHaveValue(url);
+    await expect(links.getByRole("textbox", { name: "Link for Lee" })).not.toHaveValue(url);
     await judge.goto(url);
     await expect(judge.getByRole("heading", { name: "This link doesn't work" })).toBeVisible();
   } finally {
