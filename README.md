@@ -16,7 +16,7 @@ This is a rebuild. The old app is on `main` and is the reference. See `CONTEXT.m
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
+npm run dev        # http://localhost:3000 (see TESTING.md for a ready-made demo contest)
 npm test           # unit tests
 npm run typecheck
 npm run lint
