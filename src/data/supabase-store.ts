@@ -1,9 +1,10 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { checkNewStage, kindForStage, type RoundKind, type RoundStage } from "@/core/round-rules";
+import { hashAccessToken, newAccessToken } from "@/lib/access-token";
 import { heatsToSlots, slotsToHeats, type HeatSlotRecord } from "./heat-slots";
 import { checkRoundSettings, cleanBib, cleanContestName, cleanJudgeName, compareBibs } from "./settings";
 import { StoreError, type ContestStore } from "./store";
-import type { Competitor, Contest, DancerRole, JudgeAssignment, Round, RoundJudge, RoundSettings, RoundStatus } from "./types";
+import type { AccessLinkInfo, AccessLinkKind, CallbackResultStatus, Competitor, Contest, FinalCouple, RoundCut, RoundResult, SheetSubmission, DancerRole, JudgeAssignment, Round, RoundJudge, RoundSettings, RoundStatus } from "./types";
 
 interface ContestRow {
   id: string;
@@ -49,6 +50,17 @@ interface HeatSlotRow {
   competitor_id: string;
   redancer: boolean;
 }
+
+interface LinkRow {
+  id: string;
+  round_id: string;
+  kind: AccessLinkKind;
+  judge_id: string | null;
+  created_at: string;
+}
+
+const LINK_COLUMNS = "id, round_id, kind, judge_id, created_at";
+const toLink = (row: LinkRow): AccessLinkInfo => ({ id: row.id, roundId: row.round_id, kind: row.kind, judgeId: row.judge_id, createdAt: row.created_at });
 
 const COMPETITOR_COLUMNS = "id, contest_id, bib, role, name";
 const JUDGE_COLUMNS = "id, round_id, name, assignment, is_chief";
@@ -144,7 +156,7 @@ export function createSupabaseStore(client: SupabaseClient): ContestStore {
   };
 
   /** Deletes rows matching a filter and reports not_found when nothing was there (or it is not this organiser's). */
-  const deleteOne = async (table: "contest_competitors" | "round_judges", id: string, what: string) => {
+  const deleteOne = async (table: "contest_competitors" | "round_judges" | "round_access_links", id: string, what: string) => {
     const { data, error } = await client.from(table).delete().eq("id", id).select("id");
     if (error) throw toStoreError(error, what);
     if (!data || data.length === 0) throw new StoreError("not_found", `${what} not found.`);
@@ -316,6 +328,155 @@ export function createSupabaseStore(client: SupabaseClient): ContestStore {
 
     async listHeats(roundId) {
       return fetchHeats(await fetchRound(roundId));
+    },
+
+    async createAccessLink(roundId, target) {
+      await fetchRound(roundId);
+      if (target.kind === "judge") {
+        const judge = await fetchJudge(target.judgeId);
+        if (judge.roundId !== roundId) throw new StoreError("not_found", `Judge ${target.judgeId} not found.`);
+      }
+      // Replace the earlier link, so it stops working.
+      let old = client.from("round_access_links").delete().eq("round_id", roundId).eq("kind", target.kind);
+      old = target.kind === "judge" ? old.eq("judge_id", target.judgeId) : old.is("judge_id", null);
+      const removed = await old;
+      if (removed.error) throw toStoreError(removed.error, "Link");
+
+      const token = newAccessToken();
+      const row = {
+        round_id: roundId,
+        kind: target.kind,
+        judge_id: target.kind === "judge" ? target.judgeId : null,
+        token_hash: await hashAccessToken(token)
+      };
+      const link = toLink(unwrap(await client.from("round_access_links").insert(row).select(LINK_COLUMNS).single<LinkRow>(), "Link"));
+      return { token, link };
+    },
+
+    async listAccessLinks(roundId) {
+      await fetchRound(roundId);
+      const rows = unwrap(
+        await client.from("round_access_links").select(LINK_COLUMNS).eq("round_id", roundId).order("created_at").returns<LinkRow[]>(),
+        "Links"
+      );
+      return rows.map(toLink);
+    },
+
+    async revokeAccessLink(id) {
+      await deleteOne("round_access_links", id, `Link ${id}`);
+    },
+
+    async listRoundEntries(roundId) {
+      const round = await fetchRound(roundId);
+      const all = await fetchCompetitors(round.contestId);
+      if (round.position === 1) return all;
+      const previous = (await fetchRounds(round.contestId)).find((r) => r.position === round.position - 1);
+      if (!previous) return all;
+      const rows = unwrap(
+        await client.from("round_results").select("competitor_id").eq("round_id", previous.id).eq("status", "advancing").returns<{ competitor_id: string }[]>(),
+        "Results"
+      );
+      const advancing = new Set(rows.map((r) => r.competitor_id));
+      return all.filter((c) => advancing.has(c.id));
+    },
+
+    async listRoundResults(roundId) {
+      await fetchRound(roundId);
+      const cuts = unwrap(
+        await client.from("round_cuts").select("role, cut, alternates, decided_at").eq("round_id", roundId).returns<{ role: DancerRole; cut: number; alternates: number; decided_at: string }[]>(),
+        "Cuts"
+      ).map((c): RoundCut => ({ role: c.role, cut: c.cut, alternates: c.alternates, decidedAt: c.decided_at }));
+      const results = unwrap(
+        await client
+          .from("round_results")
+          .select("competitor_id, role, rank, points_x100, status, alternate_order")
+          .eq("round_id", roundId)
+          .order("rank")
+          .returns<{ competitor_id: string; role: DancerRole; rank: number; points_x100: number; status: CallbackResultStatus; alternate_order: number | null }[]>(),
+        "Results"
+      ).map((r): RoundResult => ({ competitorId: r.competitor_id, role: r.role, rank: r.rank, pointsX100: r.points_x100, status: r.status, alternateOrder: r.alternate_order }));
+      return { cuts, results };
+    },
+
+    async listSubmissions(roundId) {
+      const round = await fetchRound(roundId);
+      if (round.kind === "final") {
+        const rows = unwrap(await client.from("final_submissions").select("judge_id, submitted_at").eq("round_id", roundId).returns<{ judge_id: string; submitted_at: string }[]>(), "Submissions");
+        return rows.map((r): SheetSubmission => ({ judgeId: r.judge_id, role: null, submittedAt: r.submitted_at }));
+      }
+      const rows = unwrap(
+        await client.from("sheet_submissions").select("judge_id, role, submitted_at").eq("round_id", roundId).returns<{ judge_id: string; role: DancerRole; submitted_at: string }[]>(),
+        "Submissions"
+      );
+      return rows.map((r): SheetSubmission => ({ judgeId: r.judge_id, role: r.role, submittedAt: r.submitted_at }));
+    },
+
+    async reopenSheet(roundId, judgeId, role) {
+      await fetchRound(roundId);
+      const result =
+        role === null
+          ? await client.from("final_submissions").delete().eq("judge_id", judgeId).eq("round_id", roundId)
+          : await client.from("sheet_submissions").delete().eq("judge_id", judgeId).eq("round_id", roundId).eq("role", role);
+      if (result.error) throw toStoreError(result.error, "Sheet");
+    },
+
+    async saveCouples(roundId, list) {
+      const round = await fetchRound(roundId);
+      if (round.kind !== "final") throw new StoreError("invalid", "Only a final has couples.");
+      const people = new Map((await fetchCompetitors(round.contestId)).map((c) => [c.id, c]));
+      const leaders = new Set<string>();
+      const followers = new Set<string>();
+      for (const pair of list) {
+        if (people.get(pair.leaderId)?.role !== "leader" || people.get(pair.followerId)?.role !== "follower") {
+          throw new StoreError("invalid", "Each couple needs a leader and a follower from this contest.");
+        }
+        if (leaders.has(pair.leaderId) || followers.has(pair.followerId)) throw new StoreError("invalid", "Someone is in two couples.");
+        leaders.add(pair.leaderId);
+        followers.add(pair.followerId);
+      }
+      const payload = list.map((pair, index) => ({ couple_number: index + 1, leader_id: pair.leaderId, follower_id: pair.followerId }));
+      const { error } = await client.rpc("replace_final_couples", { target_round: roundId, couples: payload });
+      if (error) throw toStoreError(error, `Round ${roundId}`);
+      return this.listCouples(roundId);
+    },
+
+    async listCouples(roundId) {
+      await fetchRound(roundId);
+      const rows = unwrap(
+        await client.from("final_couples").select("id, round_id, couple_number, leader_id, follower_id").eq("round_id", roundId).order("couple_number")
+          .returns<{ id: string; round_id: string; couple_number: number; leader_id: string; follower_id: string }[]>(),
+        "Couples"
+      );
+      return rows.map((r): FinalCouple => ({ id: r.id, roundId: r.round_id, number: r.couple_number, leaderId: r.leader_id, followerId: r.follower_id }));
+    },
+
+    async listFinalScores(roundId) {
+      await fetchRound(roundId);
+      const rows = unwrap(
+        await client.from("final_scores").select("judge_id, couple_id, tenths").eq("round_id", roundId).not("tenths", "is", null)
+          .returns<{ judge_id: string; couple_id: string; tenths: number }[]>(),
+        "Scores"
+      );
+      return rows.map((r) => ({ judgeId: r.judge_id, coupleId: r.couple_id, tenths: r.tenths }));
+    },
+
+    async savePlacements(roundId, list) {
+      await fetchRound(roundId);
+      if (new Set(list.map((p) => p.place)).size !== list.length) throw new StoreError("invalid", "Two couples cannot share a place.");
+      const removed = await client.from("final_round_placements").delete().eq("round_id", roundId);
+      if (removed.error) throw toStoreError(removed.error, "Placements");
+      if (list.length === 0) return;
+      const { error } = await client.from("final_round_placements").insert(list.map((p) => ({ round_id: roundId, couple_id: p.coupleId, place: p.place })));
+      if (error) throw toStoreError(error, "Placements");
+    },
+
+    async listPlacements(roundId) {
+      await fetchRound(roundId);
+      const rows = unwrap(
+        await client.from("final_round_placements").select("couple_id, place").eq("round_id", roundId).order("place").returns<{ couple_id: string; place: number }[]>(),
+        "Placements"
+      );
+      return rows.map((r) => ({ coupleId: r.couple_id, place: r.place }));
     }
   };
 }

@@ -2,7 +2,8 @@ import { checkNewStage, kindForStage, type RoundStage } from "@/core/round-rules
 import { StoreError, type ContestStore } from "./store";
 import { checkRoundSettings, cleanBib, cleanContestName, cleanJudgeName, compareBibs } from "./settings";
 import { heatsToSlots, slotsToHeats, type HeatSlotRecord } from "./heat-slots";
-import type { Competitor, Contest, Round, RoundJudge, RoundSettings } from "./types";
+import { hashAccessToken, newAccessToken } from "@/lib/access-token";
+import type { AccessLinkInfo, Competitor, Contest, FinalCouple, FinalPlacement, Round, RoundJudge, RoundResult, RoundSettings } from "./types";
 
 /** In-memory store for tests and offline development. Holds the same rules the database version must hold. */
 export function createMemoryStore(now: () => Date = () => new Date()): ContestStore {
@@ -11,6 +12,11 @@ export function createMemoryStore(now: () => Date = () => new Date()): ContestSt
   const competitors = new Map<string, Competitor>();
   const judges = new Map<string, RoundJudge & { order: number }>();
   const heatSlots = new Map<string, HeatSlotRecord[]>();
+  const links = new Map<string, AccessLinkInfo & { tokenHash: string }>();
+  // Results and scores are written through private links, which the in-memory store does not model; they stay empty.
+  const results = new Map<string, RoundResult[]>();
+  const couples = new Map<string, FinalCouple[]>();
+  const placements = new Map<string, FinalPlacement[]>();
   let counter = 0;
   const nextId = (prefix: string) => `${prefix}-${(counter += 1)}`;
   const stamp = () => now().toISOString();
@@ -223,6 +229,105 @@ export function createMemoryStore(now: () => Date = () => new Date()): ContestSt
     async listHeats(roundId) {
       const round = getRound(roundId);
       return slotsToHeats(heatSlots.get(roundId) ?? [], competitorsOf(round.contestId));
+    },
+
+    async createAccessLink(roundId, target) {
+      getRound(roundId);
+      if (target.kind === "judge") {
+        const judge = judges.get(target.judgeId);
+        if (!judge || judge.roundId !== roundId) throw new StoreError("not_found", `Judge ${target.judgeId} not found.`);
+      }
+      const judgeId = target.kind === "judge" ? target.judgeId : null;
+      for (const [id, link] of links) {
+        if (link.roundId === roundId && link.kind === target.kind && link.judgeId === judgeId) links.delete(id);
+      }
+      const token = newAccessToken();
+      const link = { id: nextId("link"), roundId, kind: target.kind, judgeId, createdAt: stamp(), tokenHash: await hashAccessToken(token) };
+      links.set(link.id, link);
+      const { tokenHash: _hash, ...info } = link;
+      void _hash;
+      return { token, link: info };
+    },
+
+    async listAccessLinks(roundId) {
+      getRound(roundId);
+      return [...links.values()]
+        .filter((link) => link.roundId === roundId && (link.judgeId === null || judges.has(link.judgeId)))
+        .map(({ tokenHash: _hash, ...info }) => {
+          void _hash;
+          return info;
+        });
+    },
+
+    async revokeAccessLink(id) {
+      if (!links.delete(id)) throw new StoreError("not_found", `Link ${id} not found.`);
+    },
+
+    async listRoundEntries(roundId) {
+      const round = getRound(roundId);
+      const all = competitorsOf(round.contestId);
+      if (round.position === 1) return all.map((c) => ({ ...c }));
+      const previous = roundsOf(round.contestId).find((r) => r.position === round.position - 1);
+      const advancing = new Set((results.get(previous?.id ?? "") ?? []).filter((r) => r.status === "advancing").map((r) => r.competitorId));
+      return all.filter((c) => advancing.has(c.id)).map((c) => ({ ...c }));
+    },
+
+    async listRoundResults(roundId) {
+      getRound(roundId);
+      return { cuts: [], results: [...(results.get(roundId) ?? [])] };
+    },
+
+    async listSubmissions(roundId) {
+      getRound(roundId);
+      return [];
+    },
+
+    async reopenSheet(roundId) {
+      getRound(roundId);
+    },
+
+    async saveCouples(roundId, list) {
+      const round = getRound(roundId);
+      if (round.kind !== "final") throw new StoreError("invalid", "Only a final has couples.");
+      const ids = new Set(competitorsOf(round.contestId).map((c) => c.id));
+      const leaders = new Set<string>();
+      const followers = new Set<string>();
+      for (const pair of list) {
+        const leader = competitors.get(pair.leaderId);
+        const follower = competitors.get(pair.followerId);
+        if (!ids.has(pair.leaderId) || !ids.has(pair.followerId) || leader?.role !== "leader" || follower?.role !== "follower") {
+          throw new StoreError("invalid", "Each couple needs a leader and a follower from this contest.");
+        }
+        if (leaders.has(pair.leaderId) || followers.has(pair.followerId)) throw new StoreError("invalid", "Someone is in two couples.");
+        leaders.add(pair.leaderId);
+        followers.add(pair.followerId);
+      }
+      const saved = list.map((pair, index) => ({ id: nextId("couple"), roundId, number: index + 1, ...pair }));
+      couples.set(roundId, saved);
+      return saved.map((c) => ({ ...c }));
+    },
+
+    async listCouples(roundId) {
+      getRound(roundId);
+      return (couples.get(roundId) ?? []).map((c) => ({ ...c }));
+    },
+
+    async listFinalScores(roundId) {
+      getRound(roundId);
+      return [];
+    },
+
+    async savePlacements(roundId, list) {
+      getRound(roundId);
+      const known = new Set((couples.get(roundId) ?? []).map((c) => c.id));
+      if (list.some((p) => !known.has(p.coupleId))) throw new StoreError("invalid", "A placement names a couple not in this final.");
+      if (new Set(list.map((p) => p.place)).size !== list.length) throw new StoreError("invalid", "Two couples cannot share a place.");
+      placements.set(roundId, list.map((p) => ({ ...p })));
+    },
+
+    async listPlacements(roundId) {
+      getRound(roundId);
+      return [...(placements.get(roundId) ?? [])].sort((a, b) => a.place - b.place);
     }
   };
 }

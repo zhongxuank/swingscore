@@ -5,7 +5,11 @@ import { useCallback, useEffect, useState } from "react";
 import { STAGE_LABELS } from "@/core/round-rules";
 import { errorMessage, useContestStore } from "@/components/use-contest-store";
 import { StoreError } from "@/data/store";
-import type { Contest, Round, RoundSettings } from "@/data/types";
+import type { Contest, Round, RoundJudge, RoundSettings } from "@/data/types";
+import { CallbackResultsSection } from "./callback-results-section";
+import { CouplesSection } from "./couples-section";
+import { FinalResultsSection } from "./final-results-section";
+import { ProgressSection } from "./progress-section";
 import { HeatsSection } from "./heats-section";
 import { PanelSection } from "./panel-section";
 import { RoundSettingsForm } from "./round-settings-form";
@@ -16,6 +20,7 @@ export function RoundSetup({ contestId, roundId }: { contestId: string; roundId:
   const [round, setRound] = useState<Round | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [judges, setJudges] = useState<RoundJudge[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -67,8 +72,10 @@ export function RoundSetup({ contestId, roundId }: { contestId: string; roundId:
       ) : null}
 
       <RoundSettingsForm key={`${round.id}-${round.yesCount}-${round.altCount}-${round.maxPerHeat}-${round.chiefJudgeCounts}`} round={round} onSave={saveSettings} />
-      <PanelSection round={round} />
-      {round.kind === "callback" ? <HeatsSection round={round} /> : null}
+      <PanelSection round={round} onJudges={setJudges} />
+      {round.kind === "callback" ? <HeatsSection round={round} /> : <CouplesSection round={round} />}
+      <ProgressSection round={round} judges={judges} />
+      {round.kind === "callback" ? <CallbackResultsSection round={round} /> : <FinalResultsSection round={round} judges={judges} />}
     </div>
   );
 }

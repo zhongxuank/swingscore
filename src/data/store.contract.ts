@@ -181,5 +181,71 @@ export function runContestStoreContract(name: string, makeStore: () => Promise<C
       await expect(store.saveHeats(final.id, buildHeats({ leaders: ["1"], followers: ["101"], maxPerHeat: 5 }))).rejects.toMatchObject({ code: "invalid" });
       expect((await store.listHeats(round.id))[0].leaders.map((s) => s.bib)).toEqual(["1"]);
     });
+    it("makes private links that replace earlier ones and can be revoked", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      const round = await store.addRound(contest.id, "prelim");
+      const lee = await store.addJudge(round.id, { name: "Lee", assignment: "leaders" });
+
+      const first = await store.createAccessLink(round.id, { kind: "judge", judgeId: lee.id });
+      expect(first.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(first.link).toMatchObject({ kind: "judge", judgeId: lee.id, roundId: round.id });
+      const second = await store.createAccessLink(round.id, { kind: "judge", judgeId: lee.id });
+      expect(second.token).not.toBe(first.token);
+      const emcee = await store.createAccessLink(round.id, { kind: "emcee" });
+      expect(emcee.link.judgeId).toBeNull();
+
+      const listed = await store.listAccessLinks(round.id);
+      expect(listed.map((link) => link.id).sort()).toEqual([second.link.id, emcee.link.id].sort());
+      expect(JSON.stringify(listed)).not.toContain(second.token);
+
+      await store.revokeAccessLink(emcee.link.id);
+      expect(await store.listAccessLinks(round.id)).toHaveLength(1);
+      await store.removeJudge(lee.id);
+      expect(await store.listAccessLinks(round.id)).toEqual([]);
+    });
+    it("lists round entries, saves final couples in order and publishes placements", async () => {
+      const store = await makeStore();
+      const contest = await store.createContest("Novice");
+      const prelim = await store.addRound(contest.id, "prelim");
+      const final = await store.addRound(contest.id, "final");
+      await store.addCompetitors(contest.id, [
+        { bib: "2", role: "leader" },
+        { bib: "1", role: "leader" },
+        { bib: "101", role: "follower" },
+        { bib: "102", role: "follower" }
+      ]);
+      expect((await store.listRoundEntries(prelim.id)).map((c) => c.bib)).toEqual(["1", "2", "101", "102"]);
+      expect(await store.listRoundEntries(final.id)).toEqual([]);
+      expect(await store.listRoundResults(prelim.id)).toEqual({ cuts: [], results: [] });
+      expect(await store.listSubmissions(prelim.id)).toEqual([]);
+
+      const people = new Map((await store.listCompetitors(contest.id)).map((c) => [c.bib, c.id]));
+      const couples = await store.saveCouples(final.id, [
+        { leaderId: people.get("2")!, followerId: people.get("101")! },
+        { leaderId: people.get("1")!, followerId: people.get("102")! }
+      ]);
+      expect(couples.map((c) => c.number)).toEqual([1, 2]);
+      expect((await store.listCouples(final.id)).map((c) => c.leaderId)).toEqual([people.get("2"), people.get("1")]);
+      await expect(store.saveCouples(final.id, [{ leaderId: people.get("101")!, followerId: people.get("102")! }])).rejects.toMatchObject({ code: "invalid" });
+      await expect(
+        store.saveCouples(final.id, [
+          { leaderId: people.get("1")!, followerId: people.get("101")! },
+          { leaderId: people.get("2")!, followerId: people.get("101")! }
+        ])
+      ).rejects.toMatchObject({ code: "invalid" });
+      await expect(store.saveCouples(prelim.id, [])).rejects.toMatchObject({ code: "invalid" });
+      expect(await store.listFinalScores(final.id)).toEqual([]);
+
+      await store.savePlacements(final.id, [
+        { coupleId: couples[1].id, place: 1 },
+        { coupleId: couples[0].id, place: 2 }
+      ]);
+      expect(await store.listPlacements(final.id)).toEqual([
+        { coupleId: couples[1].id, place: 1 },
+        { coupleId: couples[0].id, place: 2 }
+      ]);
+      await expect(store.savePlacements(final.id, [{ coupleId: couples[0].id, place: 1 }, { coupleId: couples[1].id, place: 1 }])).rejects.toMatchObject({ code: "invalid" });
+    });
   });
 }

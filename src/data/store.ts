@@ -1,6 +1,14 @@
 import type { RoundStage } from "@/core/round-rules";
 import type { Heat } from "@/core/heats";
 import type {
+  FinalCouple,
+  FinalPlacement,
+  FinalScoreRow,
+  RoundCut,
+  RoundResult,
+  SheetSubmission,
+  AccessLinkInfo,
+  AccessLinkTarget,
   Competitor,
   Contest,
   NewCompetitor,
@@ -8,7 +16,8 @@ import type {
   Round,
   RoundJudge,
   RoundSettings,
-  SavedHeat
+  SavedHeat,
+  DancerRole
 } from "./types";
 
 export type StoreErrorCode = "not_found" | "invalid";
@@ -60,4 +69,33 @@ export interface ContestStore {
   saveHeats(roundId: string, heats: Heat[]): Promise<SavedHeat[]>;
   /** The saved heats, or an empty list when none are saved. */
   listHeats(roundId: string): Promise<SavedHeat[]>;
+
+  /**
+   * Makes a private link for a judge (or chief judge) or the round's emcee, replacing any earlier one, which then
+   * stops working. Returns the raw token, which is not stored and cannot be read back later.
+   */
+  createAccessLink(roundId: string, target: AccessLinkTarget): Promise<{ token: string; link: AccessLinkInfo }>;
+  listAccessLinks(roundId: string): Promise<AccessLinkInfo[]>;
+  /** Stops a link working. */
+  revokeAccessLink(id: string): Promise<void>;
+
+  /**
+   * Who dances in a round: everyone in the contest for the first round, otherwise those the chief judge sent
+   * through from the round before (empty until that cut is decided). Bib order.
+   */
+  listRoundEntries(roundId: string): Promise<Competitor[]>;
+  /** The chief judge's stored cuts and combined ranking for a callback round. */
+  listRoundResults(roundId: string): Promise<{ cuts: RoundCut[]; results: RoundResult[] }>;
+  /** Which judges have submitted which sheets. */
+  listSubmissions(roundId: string): Promise<SheetSubmission[]>;
+  /** Reopens a submitted sheet so the judge can change it. `role` null reopens a final sheet. */
+  reopenSheet(roundId: string, judgeId: string, role: DancerRole | null): Promise<void>;
+
+  /** Replaces a final's couples, numbered in the order given. Refused once any final score is saved. */
+  saveCouples(roundId: string, couples: Array<{ leaderId: string; followerId: string }>): Promise<FinalCouple[]>;
+  listCouples(roundId: string): Promise<FinalCouple[]>;
+  listFinalScores(roundId: string): Promise<FinalScoreRow[]>;
+  /** Replaces the published placements of a final. */
+  savePlacements(roundId: string, placements: FinalPlacement[]): Promise<void>;
+  listPlacements(roundId: string): Promise<FinalPlacement[]>;
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { validatePanel, type Panel } from "@/core/panel";
 import { errorMessage, useContestStore } from "@/components/use-contest-store";
 import type { JudgeAssignment, Round, RoundJudge } from "@/data/types";
+import { LinksSection } from "./links-section";
 
 const ASSIGNMENT_LABELS: Record<JudgeAssignment, string> = { leaders: "Leaders", followers: "Followers", both: "Both roles" };
 
@@ -16,7 +17,7 @@ function toPanel(round: Round, judges: RoundJudge[]): Panel {
   };
 }
 
-export function PanelSection({ round }: { round: Round }) {
+export function PanelSection({ round, onJudges }: { round: Round; onJudges?: (judges: RoundJudge[]) => void }) {
   const store = useContestStore();
   const [judges, setJudges] = useState<RoundJudge[] | null>(null);
   const [name, setName] = useState("");
@@ -27,11 +28,13 @@ export function PanelSection({ round }: { round: Round }) {
 
   const load = useCallback(async () => {
     try {
-      setJudges(await store.listJudges(round.id));
+      const list = await store.listJudges(round.id);
+      setJudges(list);
+      onJudges?.(list);
     } catch (problem) {
       setError(errorMessage(problem));
     }
-  }, [store, round.id]);
+  }, [store, round.id, onJudges]);
 
   useEffect(() => {
     void load();
@@ -70,6 +73,7 @@ export function PanelSection({ round }: { round: Round }) {
   const problems = validatePanel(round.kind, toPanel(round, judges));
 
   return (
+    <>
     <section className="space-y-3" aria-label="Panel">
       <h2 className="text-lg font-semibold">Panel</h2>
 
@@ -180,5 +184,7 @@ export function PanelSection({ round }: { round: Round }) {
         <p className="text-sm text-green-700">Panel is complete.</p>
       )}
     </section>
+    <LinksSection round={round} judges={judges} />
+    </>
   );
 }
